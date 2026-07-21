@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+data/
+experiments/checkpoints/
+*.bin
+*.pt
+*.gguf
+data_cloud/
+experiments/
+tokenizer/*.json

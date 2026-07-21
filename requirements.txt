@@ -1,0 +1,23 @@
+# Kestrel — environment notes (see docs/03-hardware-reality.md)
+#
+# GPU training on the GTX 1080 (Pascal, sm_61) REQUIRES a wheel that still
+# ships sm_61 kernels. Known-good pins (verify with
+#   python -c "import torch; print(torch.cuda.get_arch_list())"
+# — the list must contain 'sm_61'):
+#
+#   pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu126
+#   # fallback:
+#   pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cu121
+#
+# NEVER upgrade torch mid-project; PyTorch >=2.8 cu128/cu129 wheels dropped Pascal.
+#
+# CPU-only development / smoke tests (any recent torch):
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+torch>=2.4,<2.8   # see pinned install commands above; range is for CPU dev
+numpy>=1.26
+
+# Milestone M1+ (data pipeline & evals — uncomment when needed):
+# datasets>=2.20
+# tokenizers>=0.19
+# lm-eval>=0.4
