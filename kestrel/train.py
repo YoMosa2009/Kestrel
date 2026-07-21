@@ -49,10 +49,16 @@ def wsd_lr_mult(step: int, total: int, warmup: int, decay_frac: float,
 
 # ----------------------------------------------------------------- checkpoint
 
+def _core(model):
+    """Unwrap a torch.compile()'d model so checkpoints have clean keys
+    (no '_orig_mod.' prefix) and resume works with or without --compile."""
+    return getattr(model, "_orig_mod", model)
+
+
 def save_ckpt(path, model, muon, adamw, loader, step, tokens_seen, cfg, args):
     tmp = path + ".tmp"
     torch.save({
-        "model": model.state_dict(),
+        "model": _core(model).state_dict(),
         "muon": muon.state_dict(),
         "adamw": adamw.state_dict(),
         "loader": loader.state_dict() if loader is not None else None,
@@ -67,7 +73,7 @@ def save_ckpt(path, model, muon, adamw, loader, step, tokens_seen, cfg, args):
 
 def load_ckpt(path, model, muon, adamw, loader, device):
     ck = torch.load(path, map_location=device, weights_only=False)
-    model.load_state_dict(ck["model"])
+    _core(model).load_state_dict(ck["model"])
     muon.load_state_dict(ck["muon"])
     adamw.load_state_dict(ck["adamw"])
     if loader is not None and ck.get("loader") is not None:
@@ -137,8 +143,14 @@ def main():
     ap.add_argument("--muon-lr", type=float, default=0.02)
     ap.add_argument("--adamw-lr", type=float, default=3e-3)
     ap.add_argument("--grad-clip", type=float, default=1.0)
-    ap.add_argument("--grad-checkpoint", action="store_true")
-    ap.add_argument("--bf16", action="store_true", help="cloud mode (Mini pod); local stays FP32")
+    ap.add_argument("--grad-checkpoint", action="store_true",
+                    help="recompute activations to save VRAM (needed on 8 GB; skip on 24 GB pod for speed)")
+    ap.add_argument("--loss-chunks", type=int, default=-1,
+                    help="override cfg.loss_chunks (-1=preset; on a 24 GB pod use 1-2 for speed)")
+    ap.add_argument("--bf16", action="store_true",
+                    help="cloud mode (Ampere+ pod): bf16 autocast + FlashAttention. Local Pascal stays FP32.")
+    ap.add_argument("--compile", action="store_true",
+                    help="torch.compile the model (Ampere+/pod only; best-effort, may graph-break on the GLA scan)")
     ap.add_argument("--log-every", type=int, default=20)
     ap.add_argument("--eval-every", type=int, default=500)
     ap.add_argument("--ckpt-every", type=int, default=1000)
@@ -157,10 +169,15 @@ def main():
     cfg: KestrelConfig = PRESETS[args.preset]()
     if args.grad_checkpoint:
         cfg.grad_checkpoint = True
+    if args.loss_chunks >= 0:
+        cfg.loss_chunks = args.loss_chunks
     model = KestrelModel(cfg).to(device)
     print(model.param_report())
+    if args.compile:
+        model = torch.compile(model)   # cloud only; Pascal has no Triton
+        print("torch.compile enabled")
 
-    muon, adamw = build_optimizers(model, muon_lr=args.muon_lr, adamw_lr=args.adamw_lr)
+    muon, adamw = build_optimizers(_core(model), muon_lr=args.muon_lr, adamw_lr=args.adamw_lr)
 
     # ---- data ----
     train_loader = val_loader = None

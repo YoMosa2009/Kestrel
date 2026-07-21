@@ -8,4 +8,6 @@ experiments/checkpoints/
 *.gguf
 data_cloud/
 experiments/
-tokenizer/*.json
+# keep the standard BPE tokenizer in the repo; exclude the superword experiments
+tokenizer/kestrel-super*.json
+tokenizer/kestrel-bpe50.json
