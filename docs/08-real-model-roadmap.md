@@ -96,10 +96,10 @@ costs are the training run + prep/engineering time.
 
 ## 6. Immediate next steps (checklist)
 
-1. [ ] Nano v0.1 run completes (~1.31B tokens) → pull `ckpt.pt` home.
-2. [ ] Write `generate()` inference script → actually run/prompt Nano.
-3. [ ] Honest eval: did the pillars fire? (loop-gain, state-carry, PKM, sample quality).
-4. [ ] **Phase B — optimize the GLA scan** (§3); re-benchmark.
+1. [x] ~~Nano v0.1 run completes~~ **DONE 2026-07-23** — 10,000 steps, 1.311B tokens, final val_loss 2.310, ~$21. `ckpt.pt` (1.4 GB) is home and resumable; pod terminated.
+2. [x] ~~Write `generate()` inference script~~ **DONE** — `kestrel/generate.py` (`python -m kestrel.generate --interactive`).
+3. [x] ~~Honest eval~~ **DONE** — full record in `docs/09-nano-v01-findings.md`. PKM validated; loop works as mechanism not quality-dial; model learned form, not content (undertrained).
+4. [ ] **← YOU ARE HERE · Phase B — optimize the GLA scan** (§3); re-benchmark. Bandwidth-bound at ~8k tok/s; a 2–4× win turns the ~$350 over-training run into ~$120. Do before spending more on compute.
 5. [ ] Phase C — scale the dataset toward ~5–15B unique tokens.
 6. [ ] Phase D — the real over-trained run (~20–50B tokens), WSD-resumed.
 7. [ ] Phase E/F — SFT, Roost, quantize, benchmark, Axiom.
