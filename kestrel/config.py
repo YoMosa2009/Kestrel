@@ -31,7 +31,12 @@ class KestrelConfig:
 
     # GLA blocks
     conv_kernel: int = 4          # short depthwise causal conv before projections
-    chunk_size: int = 64          # chunked-scan block length
+    # Chunked-scan block length. Measured on the GTX 1080 (Phase B, docs/08 §3):
+    # the scan is loop/launch-bound at small chunks, so 64 -> 256 is ~2.5x on the
+    # isolated scan and ~1.12x end-to-end, at +0.16 GB and ~1e-3 max abs /
+    # ~1e-5 RELATIVE error (bf16 eps is 7.8e-3). Larger (512+) regresses as the (B,H,n,C,C) score
+    # tensor starts to dominate bandwidth.
+    chunk_size: int = 256
     gate_bias_range: Tuple[float, float] = (-6.0, -2.0)  # per-head decay-spectrum init
 
     # MLP

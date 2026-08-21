@@ -48,40 +48,75 @@ tokens.** That sets the target and the budget below.
 | **E — Differentiate** | Light **SFT** (conversational) + build **Roost** (overnight consolidation, eval-gated) + session-state serialize/restore. The moat. | ~$0–25 | ~weeks |
 | **F — Ship universal** | Quantize (GGUF / the runtime), benchmark vs SmolLM2-135M/360M & Gemma-270M, deploy to phone/CPU/old-GPU, integrate into **Axiom** (TorchSharp, see [[kestrel-axiom-integration]]). | ~$0 | ~weeks |
 
-## 3. The GLA-scan optimization (Phase B — the highest-leverage move)
+## 3. Phase B — GLA-scan optimization: RESULTS (measured 2026-08-21, GTX 1080)
 
-**Problem:** `gla_chunked_scan` (kestrel/model.py) materializes per-chunk `[B,H,n,C,C]` decay
-matrices in fp32 and runs a sequential Python loop over chunks → heavy memory traffic + kernel-launch
-overhead → bandwidth-bound, ~8k tok/s, and it caps batch size (compile OOMs on those tensors).
+**Outcome: the original premise was wrong, and the 2–4x target is not available here.**
+Profiling the full model (`torch.profiler`, Nano, batch 8, seq 1024, R=2) shows it is already
+**matmul-dominated**, not scan-dominated:
 
-**Directions to try (roughly in order):**
-1. **Leaner math** — avoid materializing the full `C×C` decay matrix; fold the decay into the k/q
-   scaling so the intra-chunk term is a plain masked matmul. Cut fp32 temporaries.
-2. **Chunk-size / head tuning** — trade loop iterations vs per-chunk memory (bandwidth-bound favors
-   fewer, larger ops up to a memory ceiling).
-3. **A fused kernel for the cloud** — a Triton (or CUDA) gated-linear-attention scan for the pod
-   (Ampere+), kept behind the same interface; local stays pure-PyTorch/Pascal-safe. FlashLinearAttention
-   has reference kernels to adapt.
-4. **Recompute vs store** — with a leaner scan, non-checkpointed larger batches may fit and run faster.
+| op | share of CUDA time | note |
+|---|---|---|
+| `aten::mm` | **43%** | dense matmuls — the useful FLOPs |
+| `aten::mul` | 14% | 3,298 elementwise calls |
+| `aten::copy_` | 6.4% | padding/reshape + grad-ckpt recompute |
+| `PowBackward` (RMSNorm) | 5.7% | |
+| **`aten::bmm` (the GLA scan)** | **5.2%** | **the thing we set out to optimize** |
 
-**Target:** ~2–4× throughput (≈8k → ~20–30k tok/s on a 3090-class card). Every future training dollar
-then goes 2–4× further. Validate with `scripts/bench_throughput.py` + the smoke test (scan must stay
-numerically exact vs the naive recurrence).
+At ~2,150 tok/s the model runs at **~30% MFU** of the 1080's measured 7.4 TFLOP/s fp32 — a
+healthy eager-mode number. Amdahl's law therefore caps any scan-only win: a 2.5x on the
+isolated scan is ~1.12x end-to-end.
+
+**What was tried (all validated against the naive recurrence):**
+
+| Variant | Isolated scan | End-to-end | Verdict |
+|---|---|---|---|
+| v0 baseline, chunk 64 | 51.3 ms | 1,925 tok/s | — |
+| v1 lean temporaries (cached mask, no `full_like`) | 46.5 ms (1.10x) | ~0 | micro-opt only; no gain at large chunk |
+| **v0 @ chunk 256** | **25.5 ms (2.0x)** | **2,151 tok/s (1.12x)** | **ADOPTED** — safe, exact math |
+| v2 decay folded into q/k | 20.7 ms (2.5x) | — | **REJECTED — numerically unsafe** |
+| fused `F.rms_norm` | — | 2,157 tok/s (~0) | no gain |
+| disable grad-checkpointing | — | OOM at batch 4 | untestable on 8 GB |
+
+**Why v2 was rejected (important):** folding gives `A_ij = (q_i e^{L_i-L_0})·(k_j e^{L_0-L_j})`,
+whose k-side exponent is **>= 0** and overflows fp32. Measured: `max|k~|` = 1.4e28 at chunk 64 with
+default gates, and **`inf`/`NaN` at chunk 256, or at chunk 64 once gates get more negative**. The
+original log-space form (all exponents <= 0 by construction) exists precisely to prevent this.
+Adopting v2 for its speed would have NaN'd an expensive training run.
+
+**Adopted:** `chunk_size` 64 -> **256** (`kestrel/config.py`). Safe, exact same math, ~1.12x
+end-to-end, +0.16 GB, relative error ~1e-5 (bf16 eps is 7.8e-3). Benchmark harness kept at
+`scripts/bench_scan.py` (correctness-checks every variant before timing).
+
+**The real remaining lever is on the cloud, not here.** The v0.1 run used
+`--grad-checkpoint` at batch 16 and peaked at only ~7 GB of the 3090's 24 GB — **~17 GB sat
+unused**. Gradient checkpointing costs a full forward recompute (typically ~25-30%), so
+**turning it off (or raising the batch) on a 24 GB card is likely the biggest single win left**,
+and it costs nothing but a ~$1 sanity run to measure. It could not be tested locally: the 8 GB
+1080 OOMs without checkpointing even at batch 4.
+
+**Revised expectation:** do NOT budget on a 2-4x. Assume ~1.1x from chunk tuning, plus a
+possible ~1.3x on the pod from dropping grad-checkpointing = **~1.4x realistic**, not 3x. The
+budget table below is therefore presented at both the measured rate and an optimistic rate.
 
 ## 4. Budget reality (honest)
 
 Cost of the real over-trained run, at ~$0.51/hr (3090-class), **before vs after** the Phase-B optimization:
 
-| Tokens seen | ~tok/param | now (~8k tok/s) | after opt (~24k tok/s) | verdict |
+| Tokens seen | ~tok/param | measured (~8k tok/s) | realistic post-B (~11k tok/s) | verdict |
 |---|---|---|---|---|
-| 3B (Chinchilla) | 20 | ~$53 | ~$18 | baseline "solid" |
-| **20B** | **~130** | ~$350 | **~$120** | **strong sub-200M model** |
-| 50B | ~320 | ~$885 | ~$295 | genuinely competitive |
-| 100B+ | 640+ | ~$1,770 | ~$590 | leader-class (SmolLM territory is 2T) |
+| 3B (Chinchilla) | 20 | ~$53 | ~$39 | baseline "solid" |
+| **20B** | **~130** | ~$350 | **~$255** | **strong sub-200M model** |
+| 50B | ~320 | ~$885 | ~$645 | genuinely competitive |
+| 100B+ | 640+ | ~$1,770 | ~$1,290 | leader-class (SmolLM territory is 2T) |
 
-**Takeaway:** Phase B (~free engineering) turns the real model from a ~$350–900 spend into a
-**~$120–300 project** for a genuinely competitive over-trained 156M. That's the whole argument for
-doing the scan optimization *before* spending more on compute. Data is ~free (open corpora); the real
+*(Revised 2026-08-21 after Phase B measurement. The earlier "~24k tok/s / $120" column assumed a
+2-4x scan win that does not exist — the model is matmul-bound, not scan-bound. The ~11k figure
+assumes chunk-256 plus dropping grad-checkpointing on the pod, the latter still unverified.)*
+
+**Takeaway (revised):** Phase B did not deliver the hoped-for 3x, because the bottleneck was
+misdiagnosed — the model is already matmul-dominated at ~30% MFU. A coherent 20B-token Nano is a
+**~$255–350 project**, not ~$120. The cheap win left is dropping grad-checkpointing on the pod
+(verify with a ~$1 run). Data is ~free (open corpora); the real
 costs are the training run + prep/engineering time.
 
 ## 5. Success criteria & positioning
