@@ -2,7 +2,7 @@
 
 **A small, dense, adaptively-learning LLM architecture — two owned models: Kestrel-Nano (~150M) trained 100% on a GTX 1080 for $0, and Kestrel-Mini (~500M) cloud-pretrained for under $25. Both run on nearly any computer.**
 
-> **Start here → [MASTER-PLAN.md](MASTER-PLAN.md)** — the self-contained plan: names (Kestrel / Fledge / Roost), how the architecture and training methodology work, how they improve on existing approaches, the phased plan, and honest risks. This project is currently in the **design phase**: the deliverables are the plan documents, not an implementation.
+> **Start here → [MASTER-PLAN.md](MASTER-PLAN.md)** — the self-contained plan: names (Kestrel / Fledge / Roost), how the architecture and training methodology work, how they improve on existing approaches, the phased plan, and honest risks. **Status: Kestrel-Nano v0.1 is trained.** 157M params, 1.311B tokens, on one rented RTX 3090 for ~$21 — it generates coherent text and runs locally. See [docs/09](docs/09-nano-v01-findings.md) for the honest evaluation and [docs/08](docs/08-real-model-roadmap.md) for where it goes next.
 
 **Focus domains:** coding, tool use, language — deliberately skill/reasoning-heavy, where a small looped-and-memory-augmented model can punch above its weight.
 
@@ -46,8 +46,18 @@ requirements.txt
 
 - [x] Research sweep (2026-07-19)
 - [x] Design docs 01–07 + [MASTER-PLAN.md](MASTER-PLAN.md)
-- [x] Optional appendix: untested PyTorch sketch of the blocks (`kestrel/`)
-- [ ] Implementation phases P0–P7 — not started; see [MASTER-PLAN.md §6](MASTER-PLAN.md) and [docs/07-roadmap.md](docs/07-roadmap.md)
+- [x] **Implementation** — model, trainer (Muon + WSD, resumable), memmap data pipeline, tokenizer, inference (`kestrel/`, `scripts/`); all CPU smoke tests pass
+- [x] **Kestrel-Nano v0.1 trained** (2026-07-23) — 157M params, **1.311B tokens**, bf16 on a rented RTX 3090, final val_loss **2.310**, ~$21
+- [x] **Honest evaluation** — [docs/09](docs/09-nano-v01-findings.md). Product-key memory validated (gate → ~1.0); the looped core changes computation but is not yet a quality dial; **the model learned form, not content** (undertrained)
+- [x] **Phase B — scan optimization** — [docs/08 §3](docs/08-real-model-roadmap.md). `chunk_size` 64→256 (~1.12× end-to-end); decay-folding **rejected as numerically unsafe**; profiling shows the model is matmul-bound at ~30% MFU, so the scan was never the bottleneck
+- [ ] **Phase C** — 5B-token dataset built for generalization ([docs/10](docs/10-phase-c-plan.md)) — planned, not started
+- [ ] **Phase D/E/F** — over-train (20B+ tokens), SFT + Roost, quantize & ship
+
+### Trained artifacts (not in this repo)
+`ckpt.pt` (1.4 GB) and the tokenized corpora (~2 GB) exceed GitHub's limits and are kept
+locally. The corpora are reproducible with `scripts/prepare_data.py`; the tokenizer
+(`tokenizer/kestrel-bpe.json`) **is** committed, so a checkpoint can be loaded and run
+with `python -m kestrel.generate --interactive`.
 
 ## Ground rules baked into every decision
 
