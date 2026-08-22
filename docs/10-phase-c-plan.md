@@ -1,6 +1,6 @@
 # 10 — Phase C Plan: 5B-Token Dataset, Built for Generalization
 
-*Plan only — not started. Written 2026-08-21 after Phase B. Supersedes the one-line
+*Written 2026-08-21 after Phase B. **BUILT 2026-08-21 — see §8 for measured results.** Supersedes the one-line
 Phase C row in docs/08 §2. The governing constraint from docs/09: **v0.1 learned FORM,
 not CONTENT.** Phase C is where we attack that at the data layer.*
 
@@ -117,3 +117,52 @@ Measured against the v0.1 checkpoint as the control. Generalization claims requi
 4. Implement curriculum staging + anneal in `kestrel/train.py`.
 5. Build the generalization eval suite (§6) and **baseline v0.1 on it** — so Phase D has a control.
 6. Then Phase D (train), local or cloud, WSD-resumable either way.
+
+
+---
+
+## 8. Phase C RESULTS (built 2026-08-21)
+
+**`data_5b/` — 4.860B tokens, 30 per-domain train shards + 10 val shards (11.6M held out),
+9.1 GB on disk, built in ~2 hours. Validated: no out-of-range token IDs, all renderers
+produce correct text.**
+
+| domain | tokens | actual | target | |
+|---|---:|---:|---:|---|
+| code | 1,502M | 30.8% | 30% | ✅ StarCoderData ×10 languages |
+| web | 1,200M | 24.6% | 24% | ✅ |
+| know | 700M | 14.4% | 14% | ✅ |
+| math | 500M | 10.3% | 10% | ✅ FineMath — new |
+| cli | 300M | 6.2% | 6% | ✅ shell/powershell/batchfile/dockerfile — new |
+| repo | 250M | 5.1% | 5% | ✅ git-commits + github-issues — new |
+| inst | 250M | 5.1% | 5% | ✅ |
+| docs | 100M | 2.1% | 2% | ✅ |
+| **tool** | **53M** | **1.09%** | 3% | ⚠️ every source exhausted |
+| **sec** | **16M** | **0.33%** | 1.5% | ⚠️ every source exhausted |
+
+### Two honest shortfalls
+**tool-use and security data simply do not exist at the requested scale in open datasets.**
+Glaive (~40M), ToolACE (8M), all four Hermes configs (5M total), CyberNative (1M) and
+code_x_glue defect-detection (15M) were each pulled to exhaustion. A top-up run raised sec
+from 0.02% → 0.33% (16×) and tool from 0.8% → 1.09%, and that is the ceiling without either
+synthesising data or finding gated/commercial corpora. **Consequence: expect format familiarity
+for tool-calls and security review, not real capability.** If tool-use matters for v0.2, the
+realistic path is *generating* synthetic tool-call traces, not sourcing more.
+
+### A correction to §2 of this plan
+§2 listed "no deduplication whatsoever" as one of the three causes of v0.1's form-copying.
+**That was overstated.** With dedup on, only **2.5% of documents were dropped** (125k of ~4.6M),
+because FineWeb-Edu, Cosmopedia and StarCoderData are all already deduplicated upstream. The
+dedup pass is a cheap safety net for cross-source overlap, not the lever. **The actual fix for
+code-boilerplate memorization was replacing raw `codeparrot-clean` with quality-filtered
+StarCoderData** — source quality, not our filtering.
+
+### What v0.1 never had
+PowerShell/batchfile (v0.1's shell knowledge was accidentally Linux-only), `git-commits`
+(`<commit_before>`/`<commit_after>` — the shape of an agent edit), `github-issues`
+(problem→solution threads), math, instruct, tool, and security. Those are the domains most
+aligned with the stated target profile.
+
+### Still open before Phase D
+Items 4–5 of §7 are **not** done: curriculum staging + anneal in `kestrel/train.py`, and the
+generalization eval suite (§6) with v0.1 baselined on it as the control.

@@ -78,6 +78,35 @@ def r_secure(row):
     return f"{head}\n\nUser: {q.strip()}\n\nAssistant: {chosen.strip()}"
 
 
+def r_defect(row):
+    """Vulnerability-labelled C functions -> a security-review transcript.
+    Defensive framing: the model learns to FLAG insecure code, not to write it."""
+    func = (row.get("func") or "").strip()
+    if not func:
+        return ""
+    vulnerable = bool(row.get("target"))
+    verdict = ("This code contains a security vulnerability and should not be used as-is. "
+               "It needs review and hardening before deployment."
+               if vulnerable else
+               "No known security defect was identified in this function.")
+    return ("System: Review the following code for security defects.\n\n"
+            f"User:\n{func}\n\nAssistant: {verdict}")
+
+
+def toolace(row):
+    sys_ = row.get("system") or ""
+    conv = row.get("conversations")
+    if isinstance(conv, str):
+        try:
+            conv = json.loads(conv.replace("'", '"'))
+        except Exception:
+            return ""
+    turns = [("system", sys_)] if sys_ else []
+    if isinstance(conv, list):
+        turns += [(m.get("from"), m.get("value")) for m in conv if isinstance(m, dict)]
+    return _chat(turns)
+
+
 def sc_src(tag, lang, share):
     """A StarCoderData language subset (loaded via data_dir)."""
     return dict(tag=tag, name=SC, cfg=None, data_dir=lang, render=r_content,
@@ -117,6 +146,13 @@ SOURCES = [
     dict(tag="tool", name="glaiveai/glaive-function-calling-v2", cfg=None, data_dir=None, render=r_glaive, share=0.020, key="tool:glaive"),
     dict(tag="tool", name="NousResearch/hermes-function-calling-v1", cfg="func_calling_singleturn", data_dir=None, render=r_hermes, share=0.010, key="tool:hermes"),
     dict(tag="sec",  name="CyberNative/Code_Vulnerability_Security_DPO", cfg=None, data_dir=None, render=r_secure, share=0.015, key="sec"),
+    # --- top-up sources (2026-08-21): the originals exhausted well under target.
+    # Shares are generous on purpose; each exhausts and contributes what exists.
+    dict(tag="tool", name="Team-ACE/ToolACE", cfg=None, data_dir=None, render=toolace, share=0.030, key="tool:toolace"),
+    dict(tag="tool", name="NousResearch/hermes-function-calling-v1", cfg="func_calling",       data_dir=None, render=r_hermes, share=0.020, key="tool:hermes-fc"),
+    dict(tag="tool", name="NousResearch/hermes-function-calling-v1", cfg="glaive_func_calling", data_dir=None, render=r_hermes, share=0.020, key="tool:hermes-gl"),
+    dict(tag="tool", name="NousResearch/hermes-function-calling-v1", cfg="json_mode_agentic",   data_dir=None, render=r_hermes, share=0.010, key="tool:hermes-js"),
+    dict(tag="sec",  name="google/code_x_glue_cc_defect_detection", cfg=None, data_dir=None, render=r_defect, share=0.020, key="sec:defect"),
 ]
 
 _WS = re.compile(r"\s+")
