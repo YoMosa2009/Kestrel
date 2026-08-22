@@ -68,6 +68,11 @@ class KestrelConfig:
     # storing its activations (torch.utils.checkpoint). Only used when no
     # streaming state is carried (i.e. standard independent-sequence pretraining).
     grad_checkpoint: bool = False
+    # PARTIAL checkpointing: only checkpoint blocks whose index is a multiple of
+    # this. 1 = every block (max memory saving, max recompute); 2 = half the
+    # blocks; higher = less recompute but more VRAM. Lets a card with spare VRAM
+    # buy back part of checkpointing's ~25-30% recompute tax.
+    grad_checkpoint_every: int = 1
 
     @property
     def head_dim(self) -> int:

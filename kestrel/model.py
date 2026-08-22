@@ -348,10 +348,11 @@ class KestrelModel(nn.Module):
         # state (state is None): standard independent-sequence pretraining. When
         # state is carried, we keep activations so the state graph is intact.
         ckpt = self.cfg.grad_checkpoint and self.training and state is None
+        every = max(1, self.cfg.grad_checkpoint_every)
         for i, blk in enumerate(blocks):
             key = f"{prefix}{i}"
             blk_state = state.get(key) if state is not None else None
-            if ckpt:
+            if ckpt and (blk.index % every == 0):
                 x, new_state = torch.utils.checkpoint.checkpoint(
                     blk, x, blk_state, use_reentrant=False)
             else:

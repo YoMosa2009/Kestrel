@@ -76,6 +76,25 @@ isolated scan is ~1.12x end-to-end.
 | v2 decay folded into q/k | 20.7 ms (2.5x) | — | **REJECTED — numerically unsafe** |
 | fused `F.rms_norm` | — | 2,157 tok/s (~0) | no gain |
 | disable grad-checkpointing | — | OOM at batch 4 | untestable on 8 GB |
+| **partial checkpointing** (`grad_checkpoint_every` 2/3/4) | — | best case 2,237 tok/s (+3%) at 2x the VRAM | **NOT WORTH IT** locally |
+
+**Partial-checkpointing test (2026-08-21).** Added `cfg.grad_checkpoint_every` (checkpoint only
+every Nth block) to trade the 4.3 GB of spare VRAM against checkpointing's recompute tax:
+
+| config | tok/s | peak VRAM |
+|---|---|---|
+| full ckpt, batch 8 (baseline) | 2,170 | 3.20 GB |
+| full ckpt, batch 12 | 2,163 | 4.20 GB |
+| full ckpt, batch 16 | 2,172 | 5.31 GB |
+| every=2, batch 2 | 2,117 | 4.30 GB |
+| every=3, batch 2 | **2,237 (+3%)** | 6.09 GB |
+| every=2/3/4 at batch 4+, or no ckpt at all | OOM | >8 GB |
+
+**Throughput is flat at ~2,150–2,240 tok/s across every batch size and every checkpointing
+strategy.** That is the signature of a *compute-saturated* GPU: the 1080 is doing all it can, and
+no memory-for-recompute trade buys anything. Best case was +3% for ~2x the VRAM — rejected.
+The knob is kept (default `every=1` = unchanged behaviour) because a 24 GB pod may be able to use
+it at a useful batch size, where it is worth re-measuring.
 
 **Why v2 was rejected (important):** folding gives `A_ij = (q_i e^{L_i-L_0})·(k_j e^{L_0-L_j})`,
 whose k-side exponent is **>= 0** and overflows fp32. Measured: `max|k~|` = 1.4e28 at chunk 64 with
