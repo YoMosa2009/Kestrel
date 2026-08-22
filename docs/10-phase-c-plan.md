@@ -163,6 +163,51 @@ PowerShell/batchfile (v0.1's shell knowledge was accidentally Linux-only), `git-
 (problem→solution threads), math, instruct, tool, and security. Those are the domains most
 aligned with the stated target profile.
 
-### Still open before Phase D
-Items 4–5 of §7 are **not** done: curriculum staging + anneal in `kestrel/train.py`, and the
-generalization eval suite (§6) with v0.1 baselined on it as the control.
+## 9. Curriculum + eval suite (built 2026-08-21) — Phase C COMPLETE
+
+**Curriculum staging** — `CurriculumLoader` in `kestrel/data.py`, enabled with
+`--curriculum`. Samples each batch across the 10 per-domain shard sets using
+stage-dependent weights, so the mixture can change over training with no data rebuild:
+
+| stage | span | shape |
+|---|---|---|
+| broad | 0–40% | web 35%, know 18%, code 25% — language foundation first |
+| technical | 40–85% | code 34%, cli 8%, repo 7%, web 20% — the target profile |
+| **anneal** | 85–100% | know 22%, math 18%, **inst 15%**, code 20%, web 8% |
+
+The anneal is deliberately the **balance dial** for the "will it still talk properly?" question:
+instruct goes 3% → 15% and raw web drops 35% → 8% at the end of training, which is the phase
+that moves behaviour disproportionately. Trainer now also logs `val_by_domain` (all 10 domains
+separately) and the live `stage` weights into `metrics.jsonl`.
+
+**Generalization eval** — `scripts/eval_generalization.py`, five measures, results appended
+per-checkpoint to `experiments/generalization.json`.
+
+### v0.1 BASELINE (the control Phase D must beat)
+
+| metric | v0.1 | direction |
+|---|---:|---|
+| arithmetic (3-digit, few-shot) | **0.0%** | higher better |
+| two-hop composition (nonsense entities) | **27.5%** | higher better (~20% is chance) |
+| verbatim 20-gram copy | **0.00%** | lower better |
+| distinct-4gram (anti-repetition) | **73.3%** | higher better |
+| val loss, mean over domains | **2.695** | lower better |
+
+Per-domain val: code 2.25 · tool 2.27 · know 2.30 · inst 2.45 · math 2.78 · cli 2.80 ·
+docs 2.92 · sec 2.95 · repo 3.03 · web 3.21.
+*(v0.1 never saw cli/repo/sec/math/tool data — those are its blind spots, and exactly where
+Phase D should improve most.)*
+
+### Two honesty notes on the metrics
+1. **The two-hop test was broken on first run and has been fixed.** Originally the only colour
+   in the prompt *was* the answer, so copying the last colour word passed: v0.1 scored **75%**,
+   which is impossible for a model scoring 0% on arithmetic. Adding a **distractor colour stated
+   last** dropped it to **27.5%** — barely above the ~20% chance floor, which is the credible
+   number. A metric that flatters the control is worse than no metric.
+2. **The verbatim-copy 0.00% is a weak signal, not proof of no copying.** The n-gram index
+   samples only 20M of 4.86B tokens (~0.4%), so it detects copying from the sampled slice only.
+   It is a *lower bound* and is mainly useful as a relative signal between checkpoints. Raise
+   `--sample-tokens` for a tighter bound.
+
+**Phase C is complete.** Remaining before Phase D: choose the token budget (3B recommended,
+docs/08 §4) and set the WSD schedule to match so the anneal lands.

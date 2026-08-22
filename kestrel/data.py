@@ -88,3 +88,103 @@ def make_loaders(data_dir: str, seq_len: int, batch_size: int, device: torch.dev
     if val_files:
         val = ShardedTokenLoader(val_files, seq_len, batch_size, device, seed + 1)
     return train, val
+
+
+# ---------------------------------------------------------------- curriculum
+
+# Staged mixture (docs/05 §3, docs/10 §4): broad early -> technical middle ->
+# premium anneal. Weights are per-domain sampling probabilities; they need not
+# sum to 1 (they are normalized). Domains absent from data_dir are dropped and
+# the rest renormalized, so this is safe on partial corpora.
+CURRICULUM_STAGES = [
+    # (until_fraction_of_training, weights)
+    (0.40, {"web": 35, "know": 18, "math": 8,  "code": 25, "cli": 4,
+            "repo": 4,  "inst": 3,  "docs": 2, "tool": 0.7, "sec": 0.3}),
+    (0.85, {"web": 20, "know": 12, "math": 11, "code": 34, "cli": 8,
+            "repo": 7,  "inst": 5,  "docs": 2, "tool": 0.7, "sec": 0.3}),
+    # anneal — premium slice: knowledge, math, instruct up; raw web down.
+    # This is the lever for pulling general/conversational ability back up.
+    (1.01, {"web": 8,  "know": 22, "math": 18, "code": 20, "cli": 6,
+            "repo": 6,  "inst": 15, "docs": 2, "tool": 2,   "sec": 1}),
+]
+
+
+def discover_domains(data_dir: str, split: str = "train"):
+    """Map domain tag -> shard files, from <split>_<tag>_NNN.bin."""
+    out = {}
+    for f in sorted(glob.glob(os.path.join(data_dir, f"{split}_*.bin"))):
+        base = os.path.basename(f)[len(split) + 1:-4]      # strip "train_" / ".bin"
+        tag = base.rsplit("_", 1)[0] if "_" in base else base
+        out.setdefault(tag, []).append(f)
+    return out
+
+
+class CurriculumLoader:
+    """Samples each batch across per-domain shards using stage-dependent weights.
+
+    `set_progress(frac)` switches the mixture as training advances, so the run
+    can start broad, go technical, and finish on a premium anneal without
+    rebuilding any data.
+    """
+
+    def __init__(self, data_dir, seq_len, batch_size, device, seed=1337,
+                 stages=None, split="train"):
+        self.stages = stages or CURRICULUM_STAGES
+        self.batch_size = batch_size
+        self.device = device
+        doms = discover_domains(data_dir, split)
+        if not doms:
+            raise FileNotFoundError(f"no {split}_<tag>_*.bin shards in {data_dir}")
+        self.loaders = {}
+        for i, (tag, files) in enumerate(sorted(doms.items())):
+            try:
+                self.loaders[tag] = ShardedTokenLoader(files, seq_len, 1, device, seed + i)
+            except ValueError:
+                pass                                  # shards shorter than seq_len
+        self.rng = np.random.default_rng(seed)
+        self.set_progress(0.0)
+
+    @property
+    def total_tokens(self):
+        return sum(l.total_tokens for l in self.loaders.values())
+
+    def set_progress(self, frac: float):
+        for until, w in self.stages:
+            if frac < until:
+                weights = w
+                break
+        else:
+            weights = self.stages[-1][1]
+        tags = [t for t in self.loaders if weights.get(t, 0) > 0]
+        p = np.array([weights[t] for t in tags], dtype=np.float64)
+        self.tags, self.p = tags, p / p.sum()
+        self.stage_weights = {t: round(float(x), 4) for t, x in zip(tags, self.p)}
+
+    def get_batch(self):
+        counts = self.rng.multinomial(self.batch_size, self.p)
+        xs, ys = [], []
+        for tag, n in zip(self.tags, counts):
+            for _ in range(int(n)):
+                x, y = self.loaders[tag].get_batch()   # per-loader batch_size == 1
+                xs.append(x); ys.append(y)
+        return torch.cat(xs, 0), torch.cat(ys, 0)
+
+    def state_dict(self):
+        return {t: l.state_dict() for t, l in self.loaders.items()}
+
+    def load_state_dict(self, state):
+        for t, s in (state or {}).items():
+            if t in self.loaders:
+                self.loaders[t].load_state_dict(s)
+
+
+def make_domain_val_loaders(data_dir, seq_len, batch_size, device, seed=1337):
+    """One loader per val_<tag>.bin, for per-domain validation loss."""
+    out = {}
+    for f in sorted(glob.glob(os.path.join(data_dir, "val_*.bin"))):
+        tag = os.path.basename(f)[4:-4]
+        try:
+            out[tag] = ShardedTokenLoader([f], seq_len, batch_size, device, seed)
+        except (ValueError, FileNotFoundError):
+            pass
+    return out

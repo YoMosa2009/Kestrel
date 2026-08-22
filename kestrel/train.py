@@ -29,7 +29,7 @@ import torch
 from kestrel.config import PRESETS, KestrelConfig
 from kestrel.model import KestrelModel
 from kestrel.optim import build_optimizers
-from kestrel.data import make_loaders
+from kestrel.data import make_loaders, CurriculumLoader, make_domain_val_loaders
 
 
 # ----------------------------------------------------------------- schedule
@@ -131,6 +131,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--preset", default="nano", choices=list(PRESETS))
     ap.add_argument("--data-dir", default=None, help="dir with train*.bin / val*.bin")
+    ap.add_argument("--curriculum", action="store_true",
+                    help="stage the per-domain mixture over training + premium anneal "
+                         "(needs per-domain shards from prepare_data_v2)")
     ap.add_argument("--synthetic", action="store_true",
                     help="overfit one fixed random batch (trainer shakedown, no data)")
     ap.add_argument("--out", default="experiments/run")
@@ -181,6 +184,7 @@ def main():
 
     # ---- data ----
     train_loader = val_loader = None
+    dom_val = {}
     synth = None
     if args.synthetic:
         g = torch.Generator().manual_seed(args.seed)
@@ -188,11 +192,21 @@ def main():
                  torch.randint(0, cfg.vocab_size, (args.batch, args.seq), generator=g).to(device))
     else:
         assert args.data_dir, "--data-dir required unless --synthetic"
-        train_loader, val_loader = make_loaders(
-            args.data_dir, args.seq, args.batch, device, args.seed)
-        print(f"train shards: {len(train_loader.files)} "
-              f"({train_loader.total_tokens/1e9:.3f}B tokens)"
-              + (f" | val: {len(val_loader.files)}" if val_loader else " | no val"))
+        if args.curriculum:
+            train_loader = CurriculumLoader(args.data_dir, args.seq, args.batch,
+                                            device, args.seed)
+            dom_val = make_domain_val_loaders(args.data_dir, args.seq, args.batch, device)
+            val_loader = None
+            print(f"curriculum: {len(train_loader.loaders)} domains "
+                  f"({train_loader.total_tokens/1e9:.3f}B tokens) | "
+                  f"per-domain val: {list(dom_val)}")
+        else:
+            train_loader, val_loader = make_loaders(
+                args.data_dir, args.seq, args.batch, device, args.seed)
+            dom_val = {}
+            print(f"train shards: {len(train_loader.files)} "
+                  f"({train_loader.total_tokens/1e9:.3f}B tokens)"
+                  + (f" | val: {len(val_loader.files)}" if val_loader else " | no val"))
 
     # ---- resume ----
     step, tokens_seen = 0, 0
@@ -219,6 +233,8 @@ def main():
     while step < args.steps:
         mult = wsd_lr_mult(step, args.steps, args.warmup, args.decay_frac)
         set_lr(mult)
+        if args.curriculum and not args.synthetic:
+            train_loader.set_progress(step / max(1, args.steps))
 
         muon.zero_grad(set_to_none=True)
         adamw.zero_grad(set_to_none=True)
@@ -262,6 +278,12 @@ def main():
                       "loss_is_val": val_loader is not None,
                       "loop_gain": loop_gain(model, probe_loader, 8, cfg.r_max)}
             probes.update(pkm_health(model))
+            if dom_val:
+                probes["val_by_domain"] = {
+                    t: round(eval_val_loss(model, l, 4, cfg.r_default), 4)
+                    for t, l in dom_val.items()}
+            if args.curriculum and not args.synthetic:
+                probes["stage"] = train_loader.stage_weights
             rec = {"step": step, "probe": probes}
             log_f.write(json.dumps(rec) + "\n"); log_f.flush()
             print(f"  [probe] {'val' if val_loader else 'train'}_loss={probes['loss']} "
