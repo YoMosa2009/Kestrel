@@ -117,6 +117,45 @@ and it costs nothing but a ~$1 sanity run to measure. It could not be tested loc
 possible ~1.3x on the pod from dropping grad-checkpointing = **~1.4x realistic**, not 3x. The
 budget table below is therefore presented at both the measured rate and an optimistic rate.
 
+## 3b. HARDWARE CHANGED — RTX 3060 (measured 2026-08-27)
+
+**The lab GPU is no longer the GTX 1080. It is now an RTX 3060 (12 GB, Ampere sm_86).**
+Every throughput number above (and in docs/03, docs/10 §5) was measured on Pascal FP32 and is
+superseded for local work. Three Pascal restrictions are gone: **bf16 + tensor cores**,
+**FlashAttention-backed SDPA**, and (in principle) Triton. VRAM 8 GB -> 12 GB.
+
+| config | tok/s | peak VRAM | vs 1080 |
+|---|---:|---:|---:|
+| fp32 + ckpt, b8 (the old 1080 config) | 2,530 | 3.20 GB | 1.17x |
+| bf16 + ckpt, b8 | 4,119 | 2.71 GB | 1.90x |
+| bf16 + ckpt, b16 | 4,221 | 4.52 GB | 1.95x |
+| **bf16 + ckpt, b24** | **4,227** | 6.32 GB | **1.95x** ADOPT |
+| bf16 without ckpt, b8 / b16 | OOM | >12 GB | — |
+| bf16 + `torch.compile`, b16 | FAIL | — | Triton unavailable on Windows |
+
+**Read carefully: the win is bf16, not the card.** In FP32 the 3060 is only 1.17x a 1080 —
+it has *fewer* CUDA cores. The 1.95x comes almost entirely from **bf16 tensor cores**, which
+Pascal could not use at all. Throughput plateaus at ~4,220 tok/s from batch 16 upward, so the
+GPU is compute-saturated again (same conclusion as Phase B, new ceiling).
+
+Two things still do not work locally: **gradient checkpointing cannot be disabled** (OOM even at
+batch 8 — 12 GB is not enough, so the ~25-30% recompute tax stands), and **`torch.compile` fails
+for lack of Triton on Windows**. (Even with Triton it likely would not help: on the 4090 it
+graph-broke on the GLA scan and OOM'd compiling the `[B,H,n,C,C]` decay tensors.)
+
+### Local training time, revised (bf16, batch 24)
+
+| new tokens | cumulative seen | tok/param | RTX 3060 | (old 1080) |
+|---|---|---|---|---|
+| 1B | 2.3B | 15 | **2.8 days** | 5.5 days |
+| 2B | 3.3B | 21 | **5.6 days** | 11.0 days |
+| **3B** | **4.3B** | **27** | **8.5 days** | 16.5 days |
+| 5B | 6.3B | 40 | **14.1 days** | 27.5 days |
+
+**Phase D is now viable locally.** The recommended 3B run drops from ~16.5 days to **~8.5 days**,
+and even the full 5B is ~2 weeks rather than a month. Local training also costs roughly half the
+electricity per token. Renting remains faster in wall-clock, but the case for paying is much weaker.
+
 ## 4. Budget reality (honest)
 
 Cost of the real over-trained run, at ~$0.51/hr (3090-class), **before vs after** the Phase-B optimization:
