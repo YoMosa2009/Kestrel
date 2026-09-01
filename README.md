@@ -1,6 +1,6 @@
 # Project Kestrel
 
-**A small, dense, adaptively-learning LLM architecture — two owned models: Kestrel-Nano (~150M) trained 100% on a GTX 1080 for $0, and Kestrel-Mini (~500M) cloud-pretrained for under $25. Both run on nearly any computer.**
+**A small, dense, adaptively-learning LLM architecture. Kestrel-Nano (~157M) is trained and running — a from-scratch model built for coding, CLI/terminal work, tool use and secure coding, small enough to run on nearly any computer.**
 
 > **Start here → [MASTER-PLAN.md](MASTER-PLAN.md)** — the self-contained plan: names (Kestrel / Fledge / Roost), how the architecture and training methodology work, how they improve on existing approaches, the phased plan, and honest risks. **Status: Kestrel-Nano v0.1 is trained.** 157M params, 1.311B tokens, on one rented RTX 3090 for ~$21 — it generates coherent text and runs locally. See [docs/09](docs/09-nano-v01-findings.md) for the honest evaluation and [docs/08](docs/08-real-model-roadmap.md) for where it goes next.
 
@@ -30,7 +30,7 @@ A kestrel is a small falcon that hunts by hovering — reading the wind and adju
 docs/
   01-goals-and-constraints.md   Mission, hard constraints, success criteria, honesty section
   02-research-survey.md         Annotated survey (the "study" backbone, with links)
-  03-hardware-reality.md        What a GTX 1080 + 16 GB RAM can and cannot do, with math
+  03-hardware-reality.md        Original GTX 1080 analysis (SUPERSEDED — lab GPU is now an RTX 3060; see docs/08 §3b)
   04-architecture-spec.md       Kestrel v0.1 spec: blocks, presets (Nano/Mini), parameter budgets
   05-training-methodology.md    Scale ladder, optimizer, data curriculum, continual-learning protocol
   06-evaluation-plan.md         Probes, benchmarks, baselines, "teach-me-today" tests
@@ -50,8 +50,10 @@ requirements.txt
 - [x] **Kestrel-Nano v0.1 trained** (2026-07-23) — 157M params, **1.311B tokens**, bf16 on a rented RTX 3090, final val_loss **2.310**, ~$21
 - [x] **Honest evaluation** — [docs/09](docs/09-nano-v01-findings.md). Product-key memory validated (gate → ~1.0); the looped core changes computation but is not yet a quality dial; **the model learned form, not content** (undertrained)
 - [x] **Phase B — scan optimization** — [docs/08 §3](docs/08-real-model-roadmap.md). `chunk_size` 64→256 (~1.12× end-to-end); decay-folding **rejected as numerically unsafe**; profiling shows the model is matmul-bound at ~30% MFU, so the scan was never the bottleneck
-- [ ] **Phase C** — 5B-token dataset built for generalization ([docs/10](docs/10-phase-c-plan.md)) — planned, not started
-- [ ] **Phase D/E/F** — over-train (20B+ tokens), SFT + Roost, quantize & ship
+- [x] **Phase C complete** ([docs/10](docs/10-phase-c-plan.md)) — **4.86B-token dataset** (`data_5b/`, 30 per-domain shards): StarCoderData x10 languages, **shell/PowerShell/cmd**, git-commits + GitHub issues, FineMath, SmolTalk, tool-calling, secure-coding. Plus **curriculum staging + anneal** in the trainer and a **generalization eval suite** with v0.1 baselined as the control
+- [x] **Hardware change** (2026-08-27) — lab GPU is now an **RTX 3060 12 GB (Ampere)**. bf16 gives **1.95x** the GTX 1080 (fp32 alone is only 1.17x). Local Phase D: **3B tokens in ~8.5 days**. See [docs/08 §3b](docs/08-real-model-roadmap.md)
+- [ ] **Phase D** — the over-trained run (3B recommended first: ~8.5 days local, `--bf16 --grad-checkpoint --batch 24`)
+- [ ] **Phase E/F** — SFT (makes it conversational) + Roost, then quantize & ship
 
 ### Trained artifacts (not in this repo)
 `ckpt.pt` (1.4 GB) and the tokenized corpora (~2 GB) exceed GitHub's limits and are kept

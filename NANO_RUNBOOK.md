@@ -1,6 +1,8 @@
 # Kestrel-Nano — Local Training Runbook
 
-Everything needed to train Kestrel-Nano (~156M) end-to-end on the GTX 1080. Built and
+Everything needed to train Kestrel-Nano (~157M) end-to-end on the local GPU. NOTE: the lab
+GPU is now an **RTX 3060 12 GB (Ampere)** — use `--bf16 --grad-checkpoint --batch 24`
+(~4,227 tok/s). The GTX 1080 numbers below are historical. Built and
 verified 2026-07-20 (P0–P2 done; hero run P6a is the last step). All commands use the
 project venv: `S:\AI Architecture\.venv` (Python 3.12, torch 2.7.1+cu126, sm_61 verified).
 

@@ -1,5 +1,12 @@
 # 03 — Hardware Reality Check
 
+> **SUPERSEDED (2026-08-27).** This document analyses the original **GTX 1080 (Pascal, 8 GB,
+> FP32-only)**. The lab GPU is now an **RTX 3060 (12 GB, Ampere sm_86)**: bf16 + tensor cores
+> work, VRAM is 12 GB, and measured throughput is **4,227 tok/s** (vs ~2,170 on the 1080).
+> The Pascal constraints below — no bf16, no FlashAttention, FP32 everywhere — no longer apply
+> locally. Kept for the historical record and because they still describe the *portability*
+> floor the architecture was designed against. Current numbers: **docs/08 §3b**.
+
 Every number here shapes the design. Milestone M0 replaces estimates (†) with measurements.
 
 ## The machine

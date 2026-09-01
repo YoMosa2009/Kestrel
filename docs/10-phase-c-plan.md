@@ -81,7 +81,9 @@ confirmed to stream with inline text *before* the build starts; each needs a fal
   Keep `--shuffle-buffer 0`, small batches, and the reconnect logic that fixed it.
 
 **Local training on 5B is the honest constraint.** At the measured post-Phase-B rate of
-**2,151 tok/s**:
+**2,151 tok/s** — **SUPERSEDED 2026-08-27: the lab GPU is now an RTX 3060 and the measured
+rate is 4,227 tok/s in bf16, so every figure in this table is ~2x pessimistic. 5B is ~14 days,
+3B is ~8.5 days. See docs/08 §3b.**
 
 | Local run | Tokens seen | Wall-clock |
 |---|---|---|
