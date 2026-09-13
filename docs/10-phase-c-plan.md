@@ -187,16 +187,47 @@ per-checkpoint to `experiments/generalization.json`.
 
 ### v0.1 BASELINE (the control Phase D must beat)
 
-| metric | v0.1 | direction |
-|---|---:|---|
-| arithmetic (3-digit, few-shot) | **0.0%** | higher better |
-| two-hop composition (nonsense entities) | **27.5%** | higher better (~20% is chance) |
-| verbatim 20-gram copy | **0.00%** | lower better |
-| distinct-4gram (anti-repetition) | **73.3%** | higher better |
-| val loss, mean over domains | **2.695** | lower better |
+**Measured at BOTH context lengths (2026-09-12). Compare like with like — see the warning below.**
 
-Per-domain val: code 2.25 · tool 2.27 · know 2.30 · inst 2.45 · math 2.78 · cli 2.80 ·
-docs 2.92 · sec 2.95 · repo 3.03 · web 3.21.
+| metric | v0.1 @seq512 | v0.1 @seq1024 | direction |
+|---|---:|---:|---|
+| arithmetic (3-digit, few-shot) | **0.0%** | **0.0%** | higher better |
+| two-hop composition (nonsense entities) | **27.5%** | **27.5%** | higher better (~20% is chance) |
+| verbatim 20-gram copy | **0.00%** | **0.00%** | lower better |
+| distinct-4gram (anti-repetition) | 73.3% | **81.1%** | higher better — **context-sensitive** |
+| val loss, mean over domains | 2.695 | **2.523** | lower better — **context-sensitive** |
+
+Per-domain val @seq1024: code 1.97 · tool 2.07 · know 2.30 · inst 2.35 · math 2.57 ·
+cli 2.66 · docs 2.69 · sec 2.70 · repo 2.73 · web 3.18.
+(@seq512: code 2.25 · tool 2.27 · know 2.30 · inst 2.45 · math 2.78 · cli 2.80 ·
+docs 2.92 · sec 2.95 · repo 3.03 · web 3.21.)
+
+### ⚠ Two of these five metrics are context-length sensitive
+
+`eval_generalization.py` defaults to `--seq 512`; `train.py` probes at `--seq 1024`. Simply
+moving the *same frozen v0.1 weights* from 512 to 1024 tokens of context changes the score:
+
+| | @seq512 | @seq1024 | delta |
+|---|---:|---:|---:|
+| val_mean | 2.695 | 2.523 | **-0.172** |
+| distinct-4gram | 73.3% | 81.1% | **+7.7pp** |
+
+and the per-domain movement is large and *uneven* — repo -0.29, code -0.28, sec -0.25,
+docs -0.22, math -0.21, tool -0.20, cli -0.14, inst -0.10, web -0.02, know -0.01.
+
+**This is a trap, because that ordering is almost exactly the ordering you would predict if
+Phase D were working** — the biggest "gains" land on repo/code/sec, precisely v0.1's blind
+spots. It was caught during the Phase D shakedown, where 50 steps (4.9M tokens, 0.37% of
+v0.1's budget, at <5% of plateau LR) appeared to buy -0.21 val_mean. Almost all of it was the
+context artifact.
+
+**Rules:**
+1. **Never score a checkpoint using the in-run `val_by_domain` probe.** It runs at the
+   trainer's `--seq` with few `--eval-iters` and is a liveness signal, not a scoreboard.
+2. **Always compare via `scripts/eval_generalization.py` at a matched `--seq`.** For Phase D
+   the control is the **@seq1024 column**, since the run trains at seq 1024.
+3. arithmetic, two-hop and verbatim-copy are prompt-based and *did not move* with context
+   length — those three are safe to compare across either setting.
 *(v0.1 never saw cli/repo/sec/math/tool data — those are its blind spots, and exactly where
 Phase D should improve most.)*
 
