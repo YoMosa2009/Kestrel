@@ -76,7 +76,8 @@ class Muon(torch.optim.Optimizer):
 
 
 def build_optimizers(model: nn.Module, muon_lr: float = 0.02, adamw_lr: float = 3e-3,
-                     weight_decay: float = 0.01, adam_betas=(0.9, 0.95)):
+                     weight_decay: float = 0.01, adam_betas=(0.9, 0.95),
+                     fused: bool = False):
     """Split params into a Muon group (2-D non-embedding matrices) and an AdamW
     group (embeddings, norms/gains/scalars, gates, PKM values, 1-D params).
 
@@ -112,5 +113,6 @@ def build_optimizers(model: nn.Module, muon_lr: float = 0.02, adamw_lr: float = 
             {"params": adam_nodecay, "weight_decay": 0.0},
         ],
         lr=adamw_lr, betas=adam_betas, eps=1e-8,
+        **({"fused": True} if fused else {}),
     )
     return muon, adamw

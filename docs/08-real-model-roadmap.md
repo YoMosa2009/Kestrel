@@ -192,7 +192,87 @@ costs are the training run + prep/engineering time.
 1. [x] ~~Nano v0.1 run completes~~ **DONE 2026-07-23** — 10,000 steps, 1.311B tokens, final val_loss 2.310, ~$21. `ckpt.pt` (1.4 GB) is home and resumable; pod terminated.
 2. [x] ~~Write `generate()` inference script~~ **DONE** — `kestrel/generate.py` (`python -m kestrel.generate --interactive`).
 3. [x] ~~Honest eval~~ **DONE** — full record in `docs/09-nano-v01-findings.md`. PKM validated; loop works as mechanism not quality-dial; model learned form, not content (undertrained).
-4. [ ] **← YOU ARE HERE · Phase B — optimize the GLA scan** (§3); re-benchmark. Bandwidth-bound at ~8k tok/s; a 2–4× win turns the ~$350 over-training run into ~$120. Do before spending more on compute.
-5. [ ] Phase C — scale the dataset toward ~5–15B unique tokens.
-6. [ ] Phase D — the real over-trained run (~20–50B tokens), WSD-resumed.
+4. [x] ~~Phase B — optimize the GLA scan~~ **DONE 2026-08-21** (§3). The premise was wrong:
+   the model is matmul-dominated, not scan-dominated, so no 2–4× was available. Adopted
+   `chunk_size` 64→256 (~1.12× end-to-end); rejected decay-folding as numerically unsafe.
+5. [x] ~~Phase C — scale the dataset~~ **DONE 2026-08-22** — 4.86B tokens in `data_5b/`,
+   30 per-domain shards, plus curriculum staging and the generalization eval suite
+   ([docs/10](10-phase-c-plan.md)).
+6. [ ] **← YOU ARE HERE · Phase D — the real over-trained run.** 3B new tokens (4.3B cumulative,
+   ~27 tok/param) locally on the RTX 3060 in ~8.5 days for $0. Launch procedure, hardware
+   facts and pre-flight checks: [NANO_RUNBOOK.md §4](../NANO_RUNBOOK.md).
 7. [ ] Phase E/F — SFT, Roost, quantize, benchmark, Axiom.
+
+### Phase D pre-flight — measured 2026-09-12
+
+- **The GPU is not free at idle.** Ollama pins `gemma4:12b` (8.43 GB, `keep_alive` never
+  expires), leaving ~2.3 GB. `ollama stop gemma4:12b` before launching. Note that
+  `torch.cuda.mem_get_info()` reported 11.8 GB "free" on WDDM while a 40 MB allocation
+  OOM'd — trust `nvidia-smi`.
+- **Resume bug, fixed.** `wsd_lr_mult` was keyed off the checkpoint's *absolute* step, so a
+  WSD-resume skipped warmup and hit a decayed model with the full plateau LR. The schedule is
+  now measured from the resume point, and `--steps` is validated as cumulative.
+- **Curriculum position on resume is now explicit** (`--curriculum-start`) instead of falling
+  out of `step / args.steps` arithmetic.
+- **The corpus is on a 5400-rpm HDD** (S:, ST1000LM024) with a 9.1 GB working set against
+  ~5.8 GB of free RAM. Measured ~2.4 s/step (~5%) of serialized read time; `--prefetch N`
+  overlaps it with compute.
+### Phase D tuning: what was measured, and what did NOT work (2026-09-12)
+
+Full-step benchmark (`scripts/bench_step.py`, nano, batch 24, seq 1024, bf16, grad-ckpt on,
+**optimizer included**): **4,163 tok/s**, peak 7.71 GB. The docs/03 and docs/08 §3b figure of
+4,227 tok/s excluded the optimizer, so the optimizer costs only ~1.5% — not the ~16% a
+batch-2 profile suggests, because it is amortized across `accum`.
+
+**The Ampere profile inverts Phase B's diagnosis.** `scripts/profile_step.py` at batch 24, bf16:
+
+| op class | share of CUDA time | (GTX 1080 FP32, §3) |
+|---|---:|---:|
+| `aten::mm` | **13.3%** | 43% |
+| all matmul kernels (mm + cutlass + ampere gemm) | ~20% | ~43% |
+| `aten::mul` | 8.9% | 14% |
+| `aten::copy_` | 7.6% | 6.4% |
+| elementwise kernel tail | ~15% | — |
+| `Muon.step` | 2.2% | — |
+
+bf16 tensor cores cut matmul several-fold while leaving elementwise and reduction work
+untouched, so **the model is no longer matmul-bound on this card** — it is bandwidth- and
+elementwise-bound. That is the opposite of the Phase B conclusion, which was correct for
+Pascal FP32 and does not carry to Ampere.
+
+**But every lever that inversion suggests was measured, and none of them paid:**
+
+| change | result | verdict |
+|---|---|---|
+| TF32 for fp32 matmuls (Muon's Newton-Schulz) | **1.000x** | free, kept, no gain |
+| fused AdamW kernel | **1.000x** | free, kept, no gain |
+| `chunk_size` 64 / 128 / 512 vs 256 | 0.87x / 0.98x / 0.93x | **256 is still optimal on Ampere** |
+| lean decay mask (cached mask, no `full_like` temporary) | 1.002x | noise — not adopted |
+| disable grad-checkpointing | **OOM at batch 4** | confirmed in fresh processes |
+| partial checkpointing (`every` 2/3/4) | **OOM at batch 8** | 12 GB is genuinely not enough |
+| raise power limit 170 W -> 212 W | **no headroom to reclaim** | see below |
+| **`--prefetch 3` (background data reader)** | **+6.8%** | **ADOPTED** |
+
+**The power limit is not the constraint.** Under sustained load the card draws **142-154 W of
+its 170 W cap**, holds **1950-1965 MHz**, sits at 69-73 C, and reports
+`clocks_throttle_reasons.active = 0x0` — no power, thermal or reliability throttling at any
+sample. Raising the cap with `nvidia-smi -pl 212` would reclaim nothing. (Memory does run at
+7301 MHz rather than 7501 in the P2 compute state, worth ~2.7% of bandwidth; locking it needs
+admin and was not tested.)
+
+**The only win was I/O, not the GPU.** `data_5b` is 9.1 GB of randomly-sampled shards on a
+5400-rpm HDD with ~5.8 GB of free RAM, costing ~2.4 s per step serialized ahead of compute.
+Measured on real shards at the Phase D config: **4,083 -> 4,359 tok/s** and
+**4,413 -> 4,715 tok/s** with `--prefetch 3`. The loader was also changed to do one gather and
+one *pinned* H2D copy per domain instead of 48 pageable blocking copies per batch.
+
+**Conclusion: the RTX 3060 is already saturated at ~4,150-4,400 tok/s for this model.** Phase D
+at 3B new tokens is **~8 days**, and no further local tuning is available without changing the
+model or the precision. The remaining untested lever is `torch.compile`, which needs
+`triton-windows` and graph-broke on the GLA scan when it was tried on a 4090.
+
+- **Every tok/s figure in these docs excludes the optimizer step** —
+  `scripts/bench_throughput.py` measures only the fwd+bwd core. Use the new
+  `scripts/bench_step.py` for a full step, and `scripts/profile_step.py` to re-derive the op
+  mix on Ampere+bf16 (the §3 profile above is GTX 1080 FP32 and its conclusions do not
+  automatically carry).

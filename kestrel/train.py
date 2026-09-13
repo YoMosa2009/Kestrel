@@ -29,7 +29,8 @@ import torch
 from kestrel.config import PRESETS, KestrelConfig
 from kestrel.model import KestrelModel
 from kestrel.optim import build_optimizers
-from kestrel.data import make_loaders, CurriculumLoader, make_domain_val_loaders
+from kestrel.data import (make_loaders, CurriculumLoader, make_domain_val_loaders,
+                          PrefetchLoader)
 
 
 # ----------------------------------------------------------------- schedule
@@ -37,7 +38,13 @@ from kestrel.data import make_loaders, CurriculumLoader, make_domain_val_loaders
 def wsd_lr_mult(step: int, total: int, warmup: int, decay_frac: float,
                 floor: float = 0.0) -> float:
     """Warmup-Stable-Decay. Flat plateau, then 1-sqrt decay over the final
-    `decay_frac` of steps. Multiplies each group's base LR."""
+    `decay_frac` of steps. Multiplies each group's base LR.
+
+    `step`/`total` are measured from the START OF THIS RUN, not from the
+    checkpoint's absolute step. On a WSD-resume the previous run ended with its
+    LR decayed to ~0, so re-warming is mandatory: feeding the absolute step here
+    skips warmup entirely and slams a decayed model with the full plateau LR.
+    """
     if step < warmup:
         return (step + 1) / max(1, warmup)
     decay_start = int(total * (1.0 - decay_frac))
@@ -131,6 +138,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--preset", default="nano", choices=list(PRESETS))
     ap.add_argument("--data-dir", default=None, help="dir with train*.bin / val*.bin")
+    ap.add_argument("--curriculum-start", type=float, default=0.0,
+                    help="curriculum progress at the start of THIS run (0-1). A "
+                         "from-scratch run wants 0.0; a resume that already saw the "
+                         "broad stage can skip into 'technical' with e.g. 0.40.")
     ap.add_argument("--curriculum", action="store_true",
                     help="stage the per-domain mixture over training + premium anneal "
                          "(needs per-domain shards from prepare_data_v2)")
@@ -159,12 +170,28 @@ def main():
     ap.add_argument("--ckpt-every", type=int, default=1000)
     ap.add_argument("--ckpt-secs", type=int, default=1800, help="also checkpoint every N seconds")
     ap.add_argument("--eval-iters", type=int, default=40)
+    ap.add_argument("--no-tf32", action="store_true",
+                    help="disable TF32 tensor cores for fp32 matmuls (Ampere+). TF32 is "
+                         "ON by default: the only fp32 matmuls left under --bf16 are "
+                         "Muon's Newton-Schulz, which is an iterative orthogonalization "
+                         "and numerically indifferent to the reduced mantissa.")
+    ap.add_argument("--prefetch", type=int, default=0, metavar="DEPTH",
+                    help="read batches on a background thread, DEPTH deep (0=off). "
+                         "Overlaps HDD seeks with GPU compute; 3 is plenty.")
+    ap.add_argument("--fused-adam", action="store_true",
+                    help="use the fused CUDA AdamW kernel (one launch for all params)")
     ap.add_argument("--seed", type=int, default=1337)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
     device = torch.device(args.device)
+    # Ampere+ tensor cores for the fp32 matmuls that autocast leaves alone
+    # (Muon's Newton-Schulz). Harmless on pre-Ampere: the flag is ignored.
+    if not args.no_tf32:
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cudnn.benchmark = True      # autotune the depthwise causal conv
     os.makedirs(args.out, exist_ok=True)
     ckpt_path = os.path.join(args.out, "ckpt.pt")
     log_path = os.path.join(args.out, "metrics.jsonl")
@@ -180,7 +207,8 @@ def main():
         model = torch.compile(model)   # cloud only; Pascal has no Triton
         print("torch.compile enabled")
 
-    muon, adamw = build_optimizers(_core(model), muon_lr=args.muon_lr, adamw_lr=args.adamw_lr)
+    muon, adamw = build_optimizers(_core(model), muon_lr=args.muon_lr,
+                                   adamw_lr=args.adamw_lr, fused=args.fused_adam)
 
     # ---- data ----
     train_loader = val_loader = None
@@ -213,6 +241,18 @@ def main():
     if os.path.exists(ckpt_path):
         step, tokens_seen = load_ckpt(ckpt_path, model, muon, adamw, train_loader, device)
         print(f"resumed from {ckpt_path} at step {step} ({tokens_seen/1e9:.3f}B tokens)")
+    # Every schedule below is measured from here, so a resumed run re-warms its LR
+    # and runs its own full WSD shape between start_step and args.steps.
+    if args.prefetch and train_loader is not None:
+        train_loader = PrefetchLoader(train_loader, depth=args.prefetch)
+        print(f"prefetch: background reader, depth {args.prefetch}")
+
+    start_step = step
+    run_steps = max(1, args.steps - start_step)
+    if start_step >= args.steps:
+        raise SystemExit(f"--steps {args.steps} is at or below the resumed step "
+                         f"{start_step}; --steps is CUMULATIVE, so pass "
+                         f"{start_step} + (new steps you want).")
 
     def set_lr(mult):
         for opt, base in ((muon, args.muon_lr), (adamw, args.adamw_lr)):
@@ -227,14 +267,21 @@ def main():
     t_log = time.time()
     t_ckpt = time.time()
     log_f = open(log_path, "a")
-    print(f"training {args.preset}: {args.steps} steps x {tokens_per_step} tok/step "
-          f"= {args.steps*tokens_per_step/1e9:.2f}B tokens target | fp={'bf16' if args.bf16 else 'fp32'}")
+    tf32_on = torch.backends.cuda.matmul.allow_tf32
+    print(f"training {args.preset}: {run_steps} NEW steps "
+          f"(step {start_step} -> {args.steps}) x {tokens_per_step} tok/step "
+          f"= {run_steps*tokens_per_step/1e9:.2f}B new tokens "
+          f"({(tokens_seen + run_steps*tokens_per_step)/1e9:.2f}B cumulative) | "
+          f"fp={'bf16' if args.bf16 else 'fp32'} | tf32={tf32_on} "
+          f"| fused_adam={args.fused_adam}")
 
     while step < args.steps:
-        mult = wsd_lr_mult(step, args.steps, args.warmup, args.decay_frac)
+        rel = step - start_step
+        mult = wsd_lr_mult(rel, run_steps, args.warmup, args.decay_frac)
         set_lr(mult)
         if args.curriculum and not args.synthetic:
-            train_loader.set_progress(step / max(1, args.steps))
+            c0 = args.curriculum_start
+            train_loader.set_progress(c0 + (rel / run_steps) * (1.0 - c0))
 
         muon.zero_grad(set_to_none=True)
         adamw.zero_grad(set_to_none=True)

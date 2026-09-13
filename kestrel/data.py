@@ -44,19 +44,29 @@ class ShardedTokenLoader:
     def total_tokens(self) -> int:
         return int(sum(len(a) for a in self.arrays))
 
-    def get_batch(self):
-        xs = np.empty((self.batch_size, self.seq_len), dtype=np.int64)
-        ys = np.empty((self.batch_size, self.seq_len), dtype=np.int64)
-        shard_idx = self.rng.choice(len(self.arrays), size=self.batch_size, p=self.shard_p)
+    def get_batch(self, batch_size: int | None = None, to_device: bool = True):
+        """Gather `batch_size` random windows.
+
+        Staged through a pinned-memory buffer so the host->device copy is a real
+        async DMA; from pageable memory `non_blocking=True` is silently ignored
+        and every copy blocks the compute stream.
+        """
+        bs = self.batch_size if batch_size is None else batch_size
+        buf = np.empty((2, bs, self.seq_len), dtype=np.int64)
+        shard_idx = self.rng.choice(len(self.arrays), size=bs, p=self.shard_p)
         for b, si in enumerate(shard_idx):
             arr = self.arrays[si]
             off = int(self.rng.integers(0, self.usable[si] + 1))
             window = np.asarray(arr[off: off + self.seq_len + 1], dtype=np.int64)
-            xs[b] = window[:-1]
-            ys[b] = window[1:]
-        x = torch.from_numpy(xs).to(self.device, non_blocking=True)
-        y = torch.from_numpy(ys).to(self.device, non_blocking=True)
-        return x, y
+            buf[0, b] = window[:-1]
+            buf[1, b] = window[1:]
+        t = torch.from_numpy(buf)
+        if not to_device:
+            return t[0], t[1]
+        if self.device.type == "cuda":
+            t = t.pin_memory()
+        t = t.to(self.device, non_blocking=True)
+        return t[0], t[1]
 
     # --- resumability: the sampler RNG is the "dataloader cursor" ---
     def state_dict(self):
@@ -161,18 +171,36 @@ class CurriculumLoader:
         self.stage_weights = {t: round(float(x), 4) for t, x in zip(tags, self.p)}
 
     def get_batch(self):
+        """One gather + one pinned H2D copy per ACTIVE DOMAIN.
+
+        The old form called each domain loader once per sequence (batch_size=1),
+        so a batch of 24 cost 48 separate pageable, blocking H2D copies. Sampling
+        is unchanged: the multinomial still decides how many sequences each domain
+        contributes, they are just fetched in one call.
+        """
         counts = self.rng.multinomial(self.batch_size, self.p)
         xs, ys = [], []
         for tag, n in zip(self.tags, counts):
-            for _ in range(int(n)):
-                x, y = self.loaders[tag].get_batch()   # per-loader batch_size == 1
-                xs.append(x); ys.append(y)
+            n = int(n)
+            if n == 0:
+                continue
+            x, y = self.loaders[tag].get_batch(batch_size=n)
+            xs.append(x); ys.append(y)
         return torch.cat(xs, 0), torch.cat(ys, 0)
 
     def state_dict(self):
         return {t: l.state_dict() for t, l in self.loaders.items()}
 
     def load_state_dict(self, state):
+        # A checkpoint written by the flat ShardedTokenLoader stores {"rng": ...},
+        # which has no domain tags and so restores nothing here. That is harmless
+        # (the per-domain loaders just start from their seeds) but it must not be
+        # silent, or a resume looks like it restored a cursor it never had.
+        unknown = [t for t in (state or {}) if t not in self.loaders]
+        if unknown:
+            print(f"  [data] WARNING: checkpoint loader state has no curriculum "
+                  f"domains {unknown}; per-domain samplers start from their seeds. "
+                  f"(Expected when resuming a run made by the non-curriculum loader.)")
         for t, s in (state or {}).items():
             if t in self.loaders:
                 self.loaders[t].load_state_dict(s)
@@ -188,3 +216,70 @@ def make_domain_val_loaders(data_dir, seq_len, batch_size, device, seed=1337):
         except (ValueError, FileNotFoundError):
             pass
     return out
+
+
+class PrefetchLoader:
+    """Runs any loader's get_batch() on a background thread.
+
+    The shards live on a 5400-rpm HDD and are sampled at random offsets, so a
+    micro-batch costs real seek time that is otherwise serialized in front of the
+    GPU. A worker thread keeps `depth` batches ready, so that read overlaps the
+    previous micro-batch's compute. The numpy gather and the pinned H2D copy both
+    release the GIL, so one thread is enough.
+
+    Resume caveat (deliberate, documented): the worker runs ahead of the training
+    loop, so a checkpoint's RNG cursor is up to `depth` batches ahead of the
+    batches actually consumed. On resume that re-draws a handful of windows out of
+    billions of tokens - statistically irrelevant, but it means the loader cursor
+    is approximate rather than exact.
+    """
+
+    def __init__(self, inner, depth: int = 3):
+        import queue
+        import threading
+        self.inner = inner
+        self.q = queue.Queue(maxsize=depth)
+        self._stop = threading.Event()
+        self._t = threading.Thread(target=self._work, daemon=True)
+        self._t.start()
+
+    def _work(self):
+        while not self._stop.is_set():
+            try:
+                self.q.put(self.inner.get_batch(), timeout=1.0)
+            except Exception:
+                if self._stop.is_set():
+                    return
+                continue
+
+    def get_batch(self):
+        return self.q.get()
+
+    def close(self):
+        self._stop.set()
+
+    # --- transparently forward everything the trainer asks of a loader ---
+    def set_progress(self, frac):
+        return self.inner.set_progress(frac)
+
+    @property
+    def stage_weights(self):
+        return self.inner.stage_weights
+
+    @property
+    def total_tokens(self):
+        return self.inner.total_tokens
+
+    @property
+    def loaders(self):
+        return self.inner.loaders
+
+    @property
+    def files(self):
+        return self.inner.files
+
+    def state_dict(self):
+        return self.inner.state_dict()
+
+    def load_state_dict(self, state):
+        return self.inner.load_state_dict(state)
