@@ -1,0 +1,184 @@
+<Window x:Class="KestrelMonitor.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Kestrel — Phase D Monitor" Height="880" Width="1420"
+        Background="#12141A" Foreground="#E6E8EC" FontFamily="Segoe UI">
+  <Window.Resources>
+    <Style TargetType="TextBlock"><Setter Property="Foreground" Value="#E6E8EC"/></Style>
+    <Style x:Key="Lbl" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="#8A90A0"/><Setter Property="FontSize" Value="11"/>
+    </Style>
+    <Style x:Key="Val" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="20"/><Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style x:Key="Card" TargetType="Border">
+      <Setter Property="Background" Value="#1A1D26"/><Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="14"/><Setter Property="Margin" Value="6"/>
+    </Style>
+    <Style TargetType="Button">
+      <Setter Property="Background" Value="#272B38"/><Setter Property="Foreground" Value="#E6E8EC"/>
+      <Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="16,9"/>
+      <Setter Property="Margin" Value="0,0,8,0"/><Setter Property="FontSize" Value="13"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value><ControlTemplate TargetType="Button">
+          <Border Background="{TemplateBinding Background}" CornerRadius="6"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border></ControlTemplate></Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+
+  <Grid Margin="8">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="*"/><ColumnDefinition Width="420"/>
+    </Grid.ColumnDefinitions>
+
+    <Border Grid.Row="0" Grid.ColumnSpan="2" Style="{StaticResource Card}">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <Border x:Name="StateDot" Width="12" Height="12" CornerRadius="6"
+                  Background="#3DDC84" Margin="0,0,10,0"/>
+          <TextBlock x:Name="StateText" Text="connecting" FontSize="18" FontWeight="SemiBold"/>
+          <TextBlock x:Name="RunPath" Style="{StaticResource Lbl}" Margin="14,7,0,0"/>
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+          <Button x:Name="BtnPause" Content="Pause" Click="OnPause"/>
+          <Button x:Name="BtnResume" Content="Resume" Click="OnResume"/>
+          <Button x:Name="BtnStop" Content="Stop (checkpoint and exit)" Click="OnStop"
+                  Background="#5A2430"/>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Border Grid.Row="1" Grid.ColumnSpan="2" Style="{StaticResource Card}">
+      <StackPanel>
+        <UniformGrid Rows="1" Columns="7">
+          <StackPanel><TextBlock Style="{StaticResource Lbl}" Text="STEP"/>
+            <TextBlock x:Name="VStep" Style="{StaticResource Val}" Text="-"/></StackPanel>
+          <StackPanel><TextBlock Style="{StaticResource Lbl}" Text="PROGRESS"/>
+            <TextBlock x:Name="VProg" Style="{StaticResource Val}" Text="-"/></StackPanel>
+          <StackPanel><TextBlock Style="{StaticResource Lbl}" Text="NEW TOKENS"/>
+            <TextBlock x:Name="VTok" Style="{StaticResource Val}" Text="-"/></StackPanel>
+          <StackPanel><TextBlock Style="{StaticResource Lbl}" Text="CUMULATIVE"/>
+            <TextBlock x:Name="VCum" Style="{StaticResource Val}" Text="-"/></StackPanel>
+          <StackPanel><TextBlock Style="{StaticResource Lbl}" Text="LOSS"/>
+            <TextBlock x:Name="VLoss" Style="{StaticResource Val}" Text="-"/></StackPanel>
+          <StackPanel><TextBlock Style="{StaticResource Lbl}" Text="TOK/S"/>
+            <TextBlock x:Name="VRate" Style="{StaticResource Val}" Text="-"/></StackPanel>
+          <StackPanel><TextBlock Style="{StaticResource Lbl}" Text="ETA"/>
+            <TextBlock x:Name="VEta" Style="{StaticResource Val}" Text="-"/></StackPanel>
+        </UniformGrid>
+        <Border Height="8" CornerRadius="4" Background="#272B38" Margin="0,12,0,0">
+          <Border x:Name="ProgBar" CornerRadius="4" Background="#4C8DFF"
+                  HorizontalAlignment="Left" Width="0"/>
+        </Border>
+      </StackPanel>
+    </Border>
+
+    <ScrollViewer Grid.Row="2" Grid.Column="0" VerticalScrollBarVisibility="Auto">
+      <StackPanel>
+        <Border Style="{StaticResource Card}">
+          <StackPanel>
+            <TextBlock Text="Training loss" FontWeight="SemiBold"/>
+            <TextBlock x:Name="LossSub" Style="{StaticResource Lbl}" Margin="0,2,0,8"/>
+            <Canvas x:Name="CLoss" Height="190" Background="#12141A" ClipToBounds="True"/>
+          </StackPanel>
+        </Border>
+        <Border Style="{StaticResource Card}">
+          <StackPanel>
+            <TextBlock Text="Per-domain validation loss" FontWeight="SemiBold"/>
+            <TextBlock x:Name="ValSub" Style="{StaticResource Lbl}" Margin="0,2,0,8"/>
+            <Canvas x:Name="CVal" Height="190" Background="#12141A" ClipToBounds="True"/>
+            <WrapPanel x:Name="ValLegend" Margin="0,8,0,0"/>
+          </StackPanel>
+        </Border>
+        <Border Style="{StaticResource Card}">
+          <StackPanel>
+            <TextBlock Text="Throughput (tok/s)" FontWeight="SemiBold"/>
+            <TextBlock x:Name="RateSub" Style="{StaticResource Lbl}" Margin="0,2,0,8"/>
+            <Canvas x:Name="CRate" Height="140" Background="#12141A" ClipToBounds="True"/>
+          </StackPanel>
+        </Border>
+        <Border Style="{StaticResource Card}">
+          <StackPanel>
+            <TextBlock Text="Learning rate (WSD)" FontWeight="SemiBold" Margin="0,0,0,8"/>
+            <Canvas x:Name="CLr" Height="120" Background="#12141A" ClipToBounds="True"/>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+
+    <Grid Grid.Row="2" Grid.Column="1">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+
+      <Border Grid.Row="0" Style="{StaticResource Card}">
+        <StackPanel>
+          <TextBlock Text="Latest probe" FontWeight="SemiBold" Margin="0,0,0,8"/>
+          <TextBlock x:Name="ProbeInfo" Style="{StaticResource Lbl}" TextWrapping="Wrap"
+                     LineHeight="19" FontFamily="Consolas"/>
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Row="1" Style="{StaticResource Card}">
+        <StackPanel>
+          <TextBlock Text="Val vs v0.1 control (seq 1024)" FontWeight="SemiBold"/>
+          <TextBlock Style="{StaticResource Lbl}" Margin="0,2,0,8"
+                     Text="probe sampling is noisy - score with eval_generalization.py"/>
+          <ItemsControl x:Name="ValTable">
+            <ItemsControl.ItemTemplate><DataTemplate>
+              <Grid Margin="0,2">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="62"/><ColumnDefinition Width="72"/>
+                  <ColumnDefinition Width="72"/><ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Name}" FontFamily="Consolas"/>
+                <TextBlock Grid.Column="1" Text="{Binding Now}" FontFamily="Consolas"/>
+                <TextBlock Grid.Column="2" Text="{Binding Base}" FontFamily="Consolas"
+                           Foreground="#8A90A0"/>
+                <TextBlock Grid.Column="3" Text="{Binding Delta}" FontFamily="Consolas"
+                           Foreground="{Binding Colour}"/>
+              </Grid></DataTemplate></ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Row="2" Style="{StaticResource Card}">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+          <TextBlock Text="Messages (shared with Claude)" FontWeight="SemiBold" Margin="0,0,0,8"/>
+          <ScrollViewer Grid.Row="1" x:Name="MsgScroll" VerticalScrollBarVisibility="Auto">
+            <ItemsControl x:Name="MsgList">
+              <ItemsControl.ItemTemplate><DataTemplate>
+                <Border Background="{Binding Bg}" CornerRadius="6" Padding="9" Margin="0,3">
+                  <StackPanel>
+                    <TextBlock Text="{Binding Who}" FontSize="10" Foreground="#8A90A0"/>
+                    <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+                  </StackPanel>
+                </Border></DataTemplate></ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+          <Grid Grid.Row="2" Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="MsgBox" Background="#272B38" Foreground="#E6E8EC"
+                     BorderThickness="0" Padding="8" KeyDown="OnMsgKey"/>
+            <Button Grid.Column="1" Content="Send" Click="OnSend" Margin="8,0,0,0"/>
+          </Grid>
+        </Grid>
+      </Border>
+    </Grid>
+  </Grid>
+</Window>

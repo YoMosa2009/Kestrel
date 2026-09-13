@@ -11,3 +11,7 @@ experiments/
 # keep the standard BPE tokenizer in the repo; exclude the superword experiments
 tokenizer/kestrel-super*.json
 tokenizer/kestrel-bpe50.json
+
+# WPF monitor build output
+tools/KestrelMonitor/bin/
+tools/KestrelMonitor/obj/

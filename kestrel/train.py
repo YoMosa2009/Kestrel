@@ -54,6 +54,37 @@ def wsd_lr_mult(step: int, total: int, warmup: int, decay_frac: float,
     return floor + (1.0 - floor) * (1.0 - math.sqrt(min(1.0, p)))
 
 
+# ----------------------------------------------------------------- run control
+
+def read_control(path: str) -> str:
+    """Current command from control.json: 'run' | 'pause' | 'stop'.
+
+    Deliberately forgiving: a missing, empty, or half-written file means 'run',
+    so a UI crashing mid-write can never stall or kill a multi-day run.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return str(json.load(f).get("command", "run")).lower()
+    except Exception:
+        return "run"
+
+
+def write_status(path: str, **kw):
+    """Atomically publish live state for the monitor UI (and for Claude to read).
+
+    Written via a temp file + os.replace so a reader never sees a partial JSON
+    document. Failures here are swallowed: telemetry must never break training.
+    """
+    try:
+        kw["updated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(kw, f, indent=1)
+        os.replace(tmp, path)
+    except Exception:
+        pass
+
+
 # ----------------------------------------------------------------- checkpoint
 
 def _core(model):
@@ -195,6 +226,10 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     ckpt_path = os.path.join(args.out, "ckpt.pt")
     log_path = os.path.join(args.out, "metrics.jsonl")
+    ctl_path = os.path.join(args.out, "control.json")
+    status_path = os.path.join(args.out, "status.json")
+    if not os.path.exists(ctl_path):
+        write_status(ctl_path, command="run")
 
     cfg: KestrelConfig = PRESETS[args.preset]()
     if args.grad_checkpoint:
@@ -275,7 +310,53 @@ def main():
           f"fp={'bf16' if args.bf16 else 'fp32'} | tf32={tf32_on} "
           f"| fused_adam={args.fused_adam}")
 
+    t_start = time.time()
+    last_probe = None
+    last_metrics = {}
+    stopped = False
+
+    def publish(state, **extra):
+        el = time.time() - t_start
+        done = step - start_step
+        rate = done / el if el > 0 else 0.0
+        write_status(
+            status_path, state=state, pid=os.getpid(), out=args.out,
+            step=step, start_step=start_step, target_step=args.steps,
+            steps_done=done, steps_total=run_steps,
+            progress=round(done / run_steps, 5),
+            tokens_seen=tokens_seen,
+            tokens_new=done * tokens_per_step,
+            tokens_target=run_steps * tokens_per_step,
+            elapsed_s=round(el, 1),
+            eta_s=round((run_steps - done) / rate, 1) if rate > 0 else None,
+            preset=args.preset, batch=args.batch, accum=args.accum, seq=args.seq,
+            tokens_per_step=tokens_per_step,
+            bf16=args.bf16, curriculum=args.curriculum,
+            last_probe=last_probe, **{**last_metrics, **extra})
+
+    publish("starting")
+
     while step < args.steps:
+        cmd = read_control(ctl_path)
+        if cmd == "stop":
+            print("  [control] stop requested -> checkpointing and exiting", flush=True)
+            save_ckpt(ckpt_path, model, muon, adamw, train_loader, step,
+                      tokens_seen, cfg, args)
+            publish("stopped")
+            stopped = True
+            break
+        if cmd == "pause":
+            print("  [control] paused", flush=True)
+            publish("paused")
+            t_pause = time.time()
+            while read_control(ctl_path) == "pause":
+                time.sleep(1.0)
+                publish("paused", paused_s=round(time.time() - t_pause, 1))
+            if read_control(ctl_path) == "stop":
+                continue                      # handled at the top of the next pass
+            t_start += time.time() - t_pause  # a pause must not skew the ETA
+            print(f"  [control] resumed after {time.time()-t_pause:.0f}s", flush=True)
+
         rel = step - start_step
         mult = wsd_lr_mult(rel, run_steps, args.warmup, args.decay_frac)
         set_lr(mult)
@@ -304,6 +385,7 @@ def main():
         adamw.step()
         step += 1
         tokens_seen += tokens_per_step
+        publish("running")
 
         if step % args.log_every == 0:
             dt = time.time() - t_log
@@ -316,6 +398,9 @@ def main():
                   f"| gnorm {float(gnorm):5.2f} | {tok_s:7.0f} tok/s "
                   f"| {tokens_seen/1e9:.3f}B seen")
             t_log = time.time()
+            last_metrics = dict(loss=round(loss_accum, 4), lr_mult=round(mult, 5),
+                                lr=args.muon_lr * mult,
+                                grad_norm=round(float(gnorm), 3), tok_s=round(tok_s))
 
         if step % args.eval_every == 0 and not args.synthetic:
             # probe on val shards if present, else fall back to fresh train batches
@@ -332,6 +417,7 @@ def main():
             if args.curriculum and not args.synthetic:
                 probes["stage"] = train_loader.stage_weights
             rec = {"step": step, "probe": probes}
+            last_probe = dict(probes, step=step)
             log_f.write(json.dumps(rec) + "\n"); log_f.flush()
             print(f"  [probe] {'val' if val_loader else 'train'}_loss={probes['loss']} "
                   f"loop_gain={probes['loop_gain']} pkm_gate={probes.get('pkm_gate_mean')}", flush=True)
@@ -341,9 +427,12 @@ def main():
             t_ckpt = time.time()
             print(f"  [ckpt] saved at step {step}")
 
-    save_ckpt(ckpt_path, model, muon, adamw, train_loader, step, tokens_seen, cfg, args)
+    if not stopped:
+        save_ckpt(ckpt_path, model, muon, adamw, train_loader, step, tokens_seen, cfg, args)
+        publish("done")
     log_f.close()
-    print(f"done: {step} steps, {tokens_seen/1e9:.3f}B tokens -> {ckpt_path}")
+    print(f"{'stopped' if stopped else 'done'}: {step} steps, "
+          f"{tokens_seen/1e9:.3f}B tokens -> {ckpt_path}")
 
 
 if __name__ == "__main__":
