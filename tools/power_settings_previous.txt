@@ -1,0 +1,5 @@
+﻿saved=2026-09-12T21:51:00
+usb_selective_suspend_ac=0x00000000
+usb_selective_suspend_dc=0x00000001
+disk_idle_ac=0x00000000
+disk_idle_dc=0x00000000
