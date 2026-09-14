@@ -30,7 +30,7 @@ from kestrel.config import PRESETS, KestrelConfig
 from kestrel.model import KestrelModel
 from kestrel.optim import build_optimizers
 from kestrel.data import (make_loaders, CurriculumLoader, make_domain_val_loaders,
-                          PrefetchLoader)
+                          PrefetchLoader, SFTLoader)
 
 
 # ----------------------------------------------------------------- schedule
@@ -124,14 +124,19 @@ def load_ckpt(path, model, muon, adamw, loader, device):
 # ----------------------------------------------------------------- probes
 
 @torch.no_grad()
+def _unpack(batch):
+    """Loaders yield (x, y) or, in SFT mode, (x, y, loss_mask)."""
+    return batch if len(batch) == 3 else (batch[0], batch[1], None)
+
+
 def eval_val_loss(model, val_loader, iters, r):
     if val_loader is None:
         return None
     model.eval()
     tot = 0.0
     for _ in range(iters):
-        x, y = val_loader.get_batch()
-        _, loss = model(x, targets=y, n_loops=r)
+        x, y, lm = _unpack(val_loader.get_batch())
+        _, loss = model(x, targets=y, n_loops=r, loss_mask=lm)
         tot += loss.item()
     model.train()
     return tot / iters
@@ -145,10 +150,11 @@ def loop_gain(model, val_loader, iters, r_max):
         return {}
     model.eval()
     # fix a small set of batches so the R comparison is apples-to-apples
-    batches = [val_loader.get_batch() for _ in range(iters)]
+    batches = [_unpack(val_loader.get_batch()) for _ in range(iters)]
     out = {}
     for r in range(1, r_max + 1):
-        tot = sum(model(x, targets=y, n_loops=r)[1].item() for x, y in batches)
+        tot = sum(model(x, targets=y, n_loops=r, loss_mask=lm)[1].item()
+                  for x, y, lm in batches)
         out[f"R{r}"] = tot / len(batches)
     model.train()
     return out
@@ -169,6 +175,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--preset", default="nano", choices=list(PRESETS))
     ap.add_argument("--data-dir", default=None, help="dir with train*.bin / val*.bin")
+    ap.add_argument("--sft-dir", default=None,
+                    help="SFT mode: read <split>_tokens.bin + <split>_mask.bin from "
+                         "here and score loss ONLY on Assistant tokens. ~43%% of SFT "
+                         "tokens are prompt, so without this nearly half the compute "
+                         "goes into learning to generate user questions.")
     ap.add_argument("--curriculum-start", type=float, default=0.0,
                     help="curriculum progress at the start of THIS run (0-1). A "
                          "from-scratch run wants 0.0; a resume that already saw the "
@@ -253,6 +264,17 @@ def main():
         g = torch.Generator().manual_seed(args.seed)
         synth = (torch.randint(0, cfg.vocab_size, (args.batch, args.seq), generator=g).to(device),
                  torch.randint(0, cfg.vocab_size, (args.batch, args.seq), generator=g).to(device))
+    elif args.sft_dir:
+        train_loader = SFTLoader(args.sft_dir, args.seq, args.batch, device,
+                                 "train", args.seed)
+        try:
+            val_loader = SFTLoader(args.sft_dir, args.seq, args.batch, device,
+                                   "val", args.seed + 1)
+        except Exception:
+            val_loader = None
+        print(f"SFT: {train_loader.n_examples:,} examples, "
+              f"{train_loader.total_tokens/1e6:.2f}M tokens"
+              + (f" | val {val_loader.n_examples:,} examples" if val_loader else ""))
     else:
         assert args.data_dir, "--data-dir required unless --synthetic"
         if args.curriculum:
@@ -368,15 +390,17 @@ def main():
         adamw.zero_grad(set_to_none=True)
         loss_accum = 0.0
         for _ in range(args.accum):
+            lm = None
             if synth is not None:
                 x, y = synth
             else:
-                x, y = train_loader.get_batch()
+                got = train_loader.get_batch()
+                x, y, lm = got if len(got) == 3 else (got[0], got[1], None)
             if autocast is not None:
                 with autocast:
-                    _, loss = model(x, targets=y)      # training -> R sampled per step
+                    _, loss = model(x, targets=y, loss_mask=lm)   # R sampled per step
             else:
-                _, loss = model(x, targets=y)
+                _, loss = model(x, targets=y, loss_mask=lm)
             (loss / args.accum).backward()
             loss_accum += loss.item() / args.accum
 

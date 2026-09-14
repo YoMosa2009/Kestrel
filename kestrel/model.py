@@ -256,32 +256,55 @@ class ProductKeyMemory(nn.Module):
 # ---------------------------------------------------------------- chunked loss
 
 def _chunk_ce(h_c: torch.Tensor, W: torch.Tensor, t_c: torch.Tensor,
-              z_loss: float) -> torch.Tensor:
+              z_loss: float, m_c: torch.Tensor | None = None) -> torch.Tensor:
     """Summed cross-entropy (+ z-loss) for one token-chunk. Materializes only
-    this chunk's logits, so peak logit memory is (chunk_rows x vocab)."""
+    this chunk's logits, so peak logit memory is (chunk_rows x vocab).
+
+    `m_c` is an optional 0/1 float mask over targets (SFT: 1 on Assistant tokens
+    only). Reduction stays a SUM here; the caller divides by the mask total, so a
+    chunk with no scored tokens contributes 0 rather than a NaN."""
     logits = h_c @ W.t()
-    l = F.cross_entropy(logits.float(), t_c, reduction="sum")
+    if m_c is None:
+        l = F.cross_entropy(logits.float(), t_c, reduction="sum")
+        if z_loss > 0:
+            l = l + z_loss * logits.float().logsumexp(-1).pow(2).sum()
+        return l
+    per = F.cross_entropy(logits.float(), t_c, reduction="none")
+    l = (per * m_c).sum()
     if z_loss > 0:
-        l = l + z_loss * logits.float().logsumexp(-1).pow(2).sum()
+        # z-loss is a logit-scale regularizer, so it also applies only where we score
+        l = l + z_loss * (logits.float().logsumexp(-1).pow(2) * m_c).sum()
     return l
 
 
 def chunked_cross_entropy(h: torch.Tensor, W: torch.Tensor, targets: torch.Tensor,
-                          z_loss: float, n_chunks: int) -> torch.Tensor:
+                          z_loss: float, n_chunks: int,
+                          loss_mask: torch.Tensor | None = None) -> torch.Tensor:
     """Mean CE over (B,T) computed in `n_chunks` token-slices, each slice's
     logits recomputed in backward (checkpointed) so the full (B*T, vocab) logits
-    tensor never exists at once — the key 8 GB enabler at 49k vocab."""
+    tensor never exists at once — the key 8 GB enabler at 49k vocab.
+
+    With `loss_mask` (SFT), the mean is over SCORED tokens only. Dividing by the
+    mask total rather than N matters: ~43% of SFT tokens are prompt, so dividing
+    by N would silently scale the loss down by whatever fraction of the batch
+    happened to be Assistant text, making the effective LR depend on batch
+    composition."""
     N = h.shape[0] * h.shape[1]
     hf = h.reshape(N, h.shape[-1])
     tf = targets.reshape(N)
+    mf = loss_mask.reshape(N).to(hf.dtype) if loss_mask is not None else None
+    denom = mf.sum() if mf is not None else None
+    if denom is not None and float(denom) == 0.0:
+        return hf.new_zeros(())          # nothing to score in this micro-batch
     total = hf.new_zeros(())
-    for h_c, t_c in zip(hf.chunk(n_chunks, 0), tf.chunk(n_chunks, 0)):
+    m_chunks = mf.chunk(n_chunks, 0) if mf is not None else [None] * n_chunks
+    for h_c, t_c, m_c in zip(hf.chunk(n_chunks, 0), tf.chunk(n_chunks, 0), m_chunks):
         if torch.is_grad_enabled():
             total = total + torch.utils.checkpoint.checkpoint(
-                _chunk_ce, h_c, W, t_c, z_loss, use_reentrant=False)
+                _chunk_ce, h_c, W, t_c, z_loss, m_c, use_reentrant=False)
         else:
-            total = total + _chunk_ce(h_c, W, t_c, z_loss)   # eval: no checkpoint needed
-    return total / N
+            total = total + _chunk_ce(h_c, W, t_c, z_loss, m_c)
+    return total / (denom if denom is not None else N)
 
 
 # ---------------------------------------------------------------- blocks / model
@@ -370,6 +393,7 @@ class KestrelModel(nn.Module):
         idx: torch.Tensor,                       # (B, T) int64
         targets: Optional[torch.Tensor] = None,  # (B, T) int64
         n_loops: Optional[int] = None,
+        loss_mask: Optional[torch.Tensor] = None,  # (B, T) 0/1 — SFT: Assistant only
         state: Optional[StateDict] = None,
         return_state: bool = False,
     ):
@@ -394,7 +418,8 @@ class KestrelModel(nn.Module):
                    and self.cfg.loss_chunks > 1 and not self.cfg.mtp)
         if chunked:
             loss = chunked_cross_entropy(
-                x, self.embed.weight, targets, self.cfg.z_loss, self.cfg.loss_chunks)
+                x, self.embed.weight, targets, self.cfg.z_loss, self.cfg.loss_chunks,
+                loss_mask)
             if return_state:
                 return None, loss, carry
             return None, loss
@@ -403,10 +428,20 @@ class KestrelModel(nn.Module):
 
         loss = None
         if targets is not None:
-            loss = F.cross_entropy(
-                logits.reshape(-1, logits.size(-1)), targets.reshape(-1))
-            if self.cfg.z_loss > 0:
-                loss = loss + self.cfg.z_loss * logits.logsumexp(-1).pow(2).mean()
+            if loss_mask is None:
+                loss = F.cross_entropy(
+                    logits.reshape(-1, logits.size(-1)), targets.reshape(-1))
+                if self.cfg.z_loss > 0:
+                    loss = loss + self.cfg.z_loss * logits.logsumexp(-1).pow(2).mean()
+            else:
+                m = loss_mask.reshape(-1).to(logits.dtype)
+                d = m.sum().clamp(min=1.0)
+                per = F.cross_entropy(logits.reshape(-1, logits.size(-1)),
+                                      targets.reshape(-1), reduction="none")
+                loss = (per * m).sum() / d
+                if self.cfg.z_loss > 0:
+                    loss = loss + self.cfg.z_loss * (
+                        logits.logsumexp(-1).reshape(-1).pow(2) * m).sum() / d
             if self.cfg.mtp and targets.size(1) > 2:
                 h2 = self.mtp_norm(self.mtp_proj(x[:, :-2]))
                 logits2 = h2 @ self.embed.weight.t()

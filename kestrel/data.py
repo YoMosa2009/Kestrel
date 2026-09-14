@@ -292,3 +292,91 @@ class PrefetchLoader:
 
     def load_state_dict(self, state):
         return self.inner.load_state_dict(state)
+
+
+class SFTLoader:
+    """Loader for the masked SFT format (scripts/prepare_sft.py).
+
+    Reads `<split>_tokens.bin` (uint16) plus a parallel `<split>_mask.bin`
+    (uint8, 1 = compute loss here — Assistant tokens only).
+
+    Two correctness details that a naive random-window sampler gets wrong:
+
+      * **Windows start on an example boundary.** Starting mid-example would feed
+        the model half an answer with no question, and train it to produce
+        answers out of nowhere.
+      * **The trailing partial example is masked out.** A window almost always
+        ends mid-example; scoring that tail would teach the model to stop
+        abruptly in the middle of an answer, which is exactly the behaviour SFT
+        is supposed to remove. Everything after the last complete `<|endoftext|>`
+        in the window has its mask zeroed, so it still provides context but is
+        never a target.
+    """
+
+    def __init__(self, data_dir: str, seq_len: int, batch_size: int,
+                 device: torch.device, split: str = "train", seed: int = 1337,
+                 eot: int = 0):
+        tp = os.path.join(data_dir, f"{split}_tokens.bin")
+        mp = os.path.join(data_dir, f"{split}_mask.bin")
+        if not (os.path.exists(tp) and os.path.exists(mp)):
+            raise FileNotFoundError(f"need {tp} and {mp}")
+        self.tokens = np.memmap(tp, dtype=np.uint16, mode="r")
+        self.mask = np.memmap(mp, dtype=np.uint8, mode="r")
+        if len(self.tokens) != len(self.mask):
+            raise ValueError(f"tokens ({len(self.tokens)}) and mask "
+                             f"({len(self.mask)}) lengths disagree")
+        self.seq_len = seq_len
+        self.batch_size = batch_size
+        self.device = device
+        self.eot = eot
+        # example starts = one past every EOT, plus position 0
+        ends = np.nonzero(np.asarray(self.tokens) == eot)[0]
+        self.ends = ends
+        starts = np.concatenate([[0], ends + 1])
+        self.starts = starts[starts < len(self.tokens) - seq_len - 1]
+        if self.starts.size == 0:
+            raise ValueError("no example start fits the requested seq_len")
+        self.rng = np.random.default_rng(seed)
+
+    @property
+    def total_tokens(self) -> int:
+        return int(len(self.tokens))
+
+    @property
+    def n_examples(self) -> int:
+        return int(self.ends.size)
+
+    def get_batch(self):
+        L = self.seq_len
+        xs = np.empty((self.batch_size, L), dtype=np.int64)
+        ys = np.empty((self.batch_size, L), dtype=np.int64)
+        ms = np.empty((self.batch_size, L), dtype=np.float32)
+        picks = self.rng.choice(self.starts, size=self.batch_size)
+        for b, off in enumerate(picks):
+            off = int(off)
+            win_t = np.asarray(self.tokens[off: off + L + 1], dtype=np.int64)
+            win_m = np.asarray(self.mask[off: off + L + 1], dtype=np.float32)
+            # zero the mask past the last complete example in this window
+            eots = np.nonzero(win_t == self.eot)[0]
+            if eots.size:
+                win_m[eots[-1] + 1:] = 0.0
+            else:
+                win_m[:] = 0.0          # window holds no complete example
+            xs[b] = win_t[:-1]
+            ys[b] = win_t[1:]
+            ms[b] = win_m[1:]           # mask aligns with the TARGETS
+        t = torch.from_numpy(np.stack([xs, ys]))
+        if self.device.type == "cuda":
+            t = t.pin_memory()
+        t = t.to(self.device, non_blocking=True)
+        m = torch.from_numpy(ms)
+        if self.device.type == "cuda":
+            m = m.pin_memory()
+        return t[0], t[1], m.to(self.device, non_blocking=True)
+
+    def state_dict(self):
+        return {"rng": self.rng.bit_generator.state}
+
+    def load_state_dict(self, state):
+        if state and "rng" in state:
+            self.rng.bit_generator.state = state["rng"]
