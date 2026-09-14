@@ -131,7 +131,7 @@ superseded for local work. Three Pascal restrictions are gone: **bf16 + tensor c
 | bf16 + ckpt, b16 | 4,221 | 4.52 GB | 1.95x |
 | **bf16 + ckpt, b24** | **4,227** | 6.32 GB | **1.95x** ADOPT |
 | bf16 without ckpt, b8 / b16 | OOM | >12 GB | — |
-| bf16 + `torch.compile`, b16 | FAIL | — | Triton unavailable on Windows |
+| bf16 + `torch.compile`, b16 | FAIL | — | no Triton then; `triton-windows` exists now, but compile graph-broke on the GLA scan when tried on a 4090 *with* Triton, so the blocker is the architecture, not the OS |
 
 **Read carefully: the win is bf16, not the card.** In FP32 the 3060 is only 1.17x a 1080 —
 it has *fewer* CUDA cores. The 1.95x comes almost entirely from **bf16 tensor cores**, which
@@ -217,6 +217,53 @@ costs are the training run + prep/engineering time.
 - **The corpus is on a 5400-rpm HDD** (S:, ST1000LM024) with a 9.1 GB working set against
   ~5.8 GB of free RAM. Measured ~2.4 s/step (~5%) of serialized read time; `--prefetch N`
   overlaps it with compute.
+## 0b. LOCAL ONLY (decision, 2026-09-14)
+
+**No cloud compute. Every phase runs on the RTX 3060 until the user says otherwise.**
+
+This supersedes the cloud lines throughout docs/01, docs/03, docs/07 and §4 below.
+Those sections are kept for the reasoning they record, but their cloud budgets and
+the "$25 Mini pod" are **not the plan**.
+
+What this changes, concretely:
+
+| item | was | now |
+|---|---|---|
+| Phase D | 3B local | unchanged - already local |
+| the over-trained run | ~20B for ~$255 rented | **20B = 48 days local**, or 10B = 20 days |
+| dropping grad-checkpointing | measure on a $2 rented 4090 | **unmeasurable, dropped** - 12 GB OOMs even at batch 4, so the ~25-30% recompute tax is permanent |
+| `torch.compile` / Triton | test on a Linux pod | test locally via `triton-windows` if ever, but it graph-broke on the GLA scan when it WAS tried on a 4090 |
+| **Kestrel-Mini (~500M)** | the one cloud item (~$25) | **shelved** - see below |
+| context extension to 4k | either | local, ~0.6-1 day |
+| SFT | either | local, ~2 h |
+
+### The local-only ladder for Nano (at the measured 4,100 tok/s)
+
+| cumulative | tok/param | new tokens | days | corpus epochs |
+|---:|---:|---:|---:|---:|
+| 4B | 25 | +1.0B | 2.8 | 0.8x |
+| 6B | 38 | +3.0B | 8.5 | 1.2x |
+| 10B | 64 | +7.0B | 19.8 | 2.1x |
+| 15B | 95 | +12.0B | 33.9 | 3.1x |
+| 20B | 127 | +17.0B | 48.0 | 4.1x - at the repeat limit |
+
+20B remains reachable locally; it costs seven weeks of wall-clock instead of $255,
+and it is the ceiling on the current 4.87B-token corpus. Going further needs a
+Phase C extension to ~10-15B unique tokens (free - time, bandwidth and ~22 GB of
+disk), not money.
+
+### Kestrel-Mini is shelved, not cancelled
+
+docs/01 ruled out local Mini pretraining on the **GTX 1080**. On the 3060 the
+arithmetic is different but still unattractive: compute scales roughly with
+parameters, so Mini (482M) runs at ~1,340 tok/s, and a Chinchilla-ish 10B tokens
+is **~87 days - about three months** as a single run. VRAM fit at 12 GB is also
+unverified. So under a local-only constraint the two-tier Nano+Mini family becomes
+**Nano-only**, and Mini waits for either a hardware change or a lifted constraint.
+
+That is not a bad outcome for the thesis: docs/08 §0 already argues the sub-200M
+niche is the sharp end of the mission, and Nano is the model that occupies it.
+
 ### Phase D tuning: what was measured, and what did NOT work (2026-09-12)
 
 Full-step benchmark (`scripts/bench_step.py`, nano, batch 24, seq 1024, bf16, grad-ckpt on,
