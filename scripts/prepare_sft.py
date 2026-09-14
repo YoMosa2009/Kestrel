@@ -113,6 +113,19 @@ def a_glaive(row):
     return render(turns)
 
 
+def a_hermes(row):
+    """Hermes function-calling: a conversations list, same shape as ToolACE."""
+    conv = row.get("conversations")
+    if isinstance(conv, str):
+        try:
+            conv = json.loads(conv.replace("'", '"'))
+        except Exception:
+            return []
+    if not isinstance(conv, list):
+        return []
+    return render([(m.get("from"), m.get("value")) for m in conv if isinstance(m, dict)])
+
+
 def a_sec(row):
     q, ch = row.get("question"), row.get("chosen")
     if not q or not ch:
@@ -221,7 +234,16 @@ SOURCES = [
     ("inst:smoltalk", "HuggingFaceTB/smoltalk", "all", a_smoltalk, 0.25),
     ("cli:nl2bash", "AnishJoshi/nl2bash-custom", None, a_nl2bash, 0.15),
     ("tool:toolace", "Team-ACE/ToolACE", None, a_toolace, 0.08),
-    ("tool:glaive", "glaiveai/glaive-function-calling-v2", None, a_glaive, 0.07),
+    # glaive-function-calling-v2 is NOT used: its shards need a contiguous memory
+    # block pandas cannot reserve on a 16 GB box that is also training, and it
+    # dies mid-iteration ("Could not reserve memory block") after ~40 rows. The
+    # a_glaive adapter is kept and verified (40/40 rows parsed) so the source can
+    # be restored on a machine with more RAM. Its 7% moved to Hermes, which
+    # streams reliably and is the same task.
+    ("tool:hermes-sgl", "NousResearch/hermes-function-calling-v1",
+     "func_calling_singleturn", a_hermes, 0.04),
+    ("tool:hermes-fc", "NousResearch/hermes-function-calling-v1",
+     "func_calling", a_hermes, 0.03),
     ("sec:dpo", "CyberNative/Code_Vulnerability_Security_DPO", None, a_sec, 0.05),
 ]
 REFUSAL_SHARE = 0.05
@@ -263,9 +285,25 @@ def main():
         got, longs, seen = [], [], 0
         print(f"[{key}] target {want} ({want_long} long >= {args.long_min} tok) "
               f"from {name} ...", flush=True)
+        # Opening a stream can fail transiently under memory pressure. On a 16 GB
+        # box that is also training, glaive died once with "Could not reserve memory
+        # block" and produced ZERO examples with an empty error string. Silently
+        # losing a whole source is the worst outcome here, so retry then SHOUT.
+        ds = None
+        for attempt in range(3):
+            try:
+                ds = (load_dataset(name, cfg, split='train', streaming=True) if cfg
+                      else load_dataset(name, split='train', streaming=True))
+                break
+            except Exception as e:
+                print(f'[{key}] open attempt {attempt+1}/3 failed: '
+                      f'{type(e).__name__}: {str(e)[:80]}', flush=True)
+                time.sleep(5 * (attempt + 1))
+        if ds is None:
+            print(f'[{key}] *** SOURCE UNAVAILABLE - slice will be EMPTY ***', flush=True)
+            collected[key] = []
+            continue
         try:
-            ds = load_dataset(name, cfg, split="train", streaming=True) if cfg \
-                else load_dataset(name, split="train", streaming=True)
             for row in ds:
                 seen += 1
                 if seen > want * 40 + 2000:
@@ -289,7 +327,8 @@ def main():
                 if len(got) >= want - want_long and len(longs) >= want_long:
                     break
         except Exception as e:
-            print(f"[{key}] FAILED: {str(e)[:120]}", flush=True)
+            print(f"[{key}] iteration stopped early: {type(e).__name__}: "
+                  f"{str(e)[:100]}", flush=True)
         collected[key] = got + longs
         print(f"[{key}] kept {len(got)+len(longs)} ({len(longs)} long) "
               f"of {seen} rows seen ({time.time()-t0:.0f}s elapsed)", flush=True)
@@ -336,7 +375,16 @@ def main():
               f"{100*b.mean():.1f}% loss targets | median {np.median(lens):.0f} tok, "
               f"{100*(lens>=1024).mean():.0f}% >=1024, {100*(lens>=2048).mean():.0f}% >=2048")
 
+    targets = {k: int(args.examples * sh) for k, _, _, _, sh in SOURCES}
+    targets["refusal"] = int(args.examples * REFUSAL_SHARE)
+    targets["plan"] = int(args.examples * PLAN_SHARE)
     manifest["per_source"] = {k: len(v) for k, v in collected.items()}
+    manifest["shortfall"] = {k: targets[k] - len(collected.get(k, []))
+                             for k in targets if len(collected.get(k, [])) < targets[k]}
+    if manifest["shortfall"]:
+        print(chr(10) + "SHORTFALLS (source exhausted or unavailable):")
+        for k, n in manifest["shortfall"].items():
+            print(f"  {k:18s} short by {n} of {targets[k]}")
     with open(os.path.join(args.out, "manifest.json"), "w") as f:
         json.dump(manifest, f, indent=1)
     print(f"\ndone in {time.time()-t0:.0f}s -> {args.out}")
