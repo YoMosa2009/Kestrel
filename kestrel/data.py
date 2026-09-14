@@ -106,16 +106,25 @@ def make_loaders(data_dir: str, seq_len: int, batch_size: int, device: torch.dev
 # premium anneal. Weights are per-domain sampling probabilities; they need not
 # sum to 1 (they are normalized). Domains absent from data_dir are dropped and
 # the rest renormalized, so this is safe on partial corpora.
+# Tool weight raised 0.7 -> 4.0 (2026-09-13). Tool use is a third of Kestrel's
+# stated target profile but the curriculum was drawing it at 0.7%, which used
+# only ~26% of the 53.2M-token tool pool over a whole run. 4.0% draws ~54M over
+# Phase D's remaining budget = ~1.0 epoch of the pool: the most tool exposure
+# available WITHOUT needing new data (6%+ would need ~30M more tokens than
+# exist in data_5b). The 3.3 points come out of `code`, which is the largest
+# slice and the strongest performer in the probes (1.35 vs a 1.97 control), so
+# it has the most slack; web/know are left alone because general language is
+# already the weaker side and the anneal depends on them.
 CURRICULUM_STAGES = [
     # (until_fraction_of_training, weights)
-    (0.40, {"web": 35, "know": 18, "math": 8,  "code": 25, "cli": 4,
-            "repo": 4,  "inst": 3,  "docs": 2, "tool": 0.7, "sec": 0.3}),
-    (0.85, {"web": 20, "know": 12, "math": 11, "code": 34, "cli": 8,
-            "repo": 7,  "inst": 5,  "docs": 2, "tool": 0.7, "sec": 0.3}),
+    (0.40, {"web": 35, "know": 18, "math": 8,  "code": 21.7, "cli": 4,
+            "repo": 4,  "inst": 3,  "docs": 2, "tool": 4.0, "sec": 0.3}),
+    (0.85, {"web": 20, "know": 12, "math": 11, "code": 30.7, "cli": 8,
+            "repo": 7,  "inst": 5,  "docs": 2, "tool": 4.0, "sec": 0.3}),
     # anneal — premium slice: knowledge, math, instruct up; raw web down.
     # This is the lever for pulling general/conversational ability back up.
-    (1.01, {"web": 8,  "know": 22, "math": 18, "code": 20, "cli": 6,
-            "repo": 6,  "inst": 15, "docs": 2, "tool": 2,   "sec": 1}),
+    (1.01, {"web": 8,  "know": 22, "math": 18, "code": 18, "cli": 6,
+            "repo": 6,  "inst": 15, "docs": 2, "tool": 4.0, "sec": 1}),
 ]
 
 
