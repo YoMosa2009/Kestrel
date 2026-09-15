@@ -198,10 +198,25 @@ costs are the training run + prep/engineering time.
 5. [x] ~~Phase C — scale the dataset~~ **DONE 2026-08-22** — 4.86B tokens in `data_5b/`,
    30 per-domain shards, plus curriculum staging and the generalization eval suite
    ([docs/10](10-phase-c-plan.md)).
-6. [ ] **← YOU ARE HERE · Phase D — the real over-trained run.** 3B new tokens (4.3B cumulative,
-   ~27 tok/param) locally on the RTX 3060 in ~8.5 days for $0. Launch procedure, hardware
-   facts and pre-flight checks: [NANO_RUNBOOK.md §4](../NANO_RUNBOOK.md).
-7. [ ] Phase E/F — SFT, Roost, quantize, benchmark, Axiom.
+6. [ ] **← YOU ARE HERE · Phase D — RUNNING.** Target step 18,590 = **3.00B cumulative**
+   (19 tok/param), ~3.9 days at the measured 4,100 tok/s, anneal over steps 17,561-18,590.
+   Shortened from 4.31B at the loss-curve knee (§0b, `scripts/stopping_point.py`): past 3B
+   the marginal gain per day halves from ~0.08 to ~0.05 val_mean. Tool curriculum weight
+   raised 0.7% -> 4.0% mid-run. Procedure: [NANO_RUNBOOK.md §4](../NANO_RUNBOOK.md).
+7. [x] **Roost built** - `kestrel/roost/`: episodic store, session serialize/restore, and the
+   eval-gated consolidation job (50/50 new+replay, TF-IDF slot selection, recall >= 60% and
+   regression <= 2% or roll back). Containment is enforced structurally after every optimizer
+   step, because AdamW's weight decay updates every row regardless of gradient - gradient
+   masking alone silently writes to all 32k slots. Mechanics unit-tested; teach-me-today
+   awaits the finished model.
+8. [x] **SFT set + loss masking built** - 23,289 examples / 16.2M tokens in `data_sft/`, built
+   for a 4k context in the exact template pretraining already saw. Loss is scored on Assistant
+   tokens only (43% of SFT tokens are prompt). The scored fraction depends on sequence length -
+   11.6% at seq 512 vs 44.9% at seq 4096 - so this data MUST be trained at 4096.
+9. [ ] **Context extension to 4k** - must run BEFORE the SFT, or the SFT is partly overwritten.
+   Only 5 of 20 blocks carry RoPE; the 15 GLA blocks are NoPE and length-agnostic, so ~75% of
+   the model is already 4k-ready. ~0.2-0.5B tokens, ~0.6-1 day locally.
+10. [ ] Phase E/F - run the SFT, validate teach-me-today, quantize, benchmark, Axiom.
 
 ### Phase D pre-flight — measured 2026-09-12
 
