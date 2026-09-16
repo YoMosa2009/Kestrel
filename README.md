@@ -38,6 +38,7 @@ docs/
   08-real-model-roadmap.md      The forward plan: local-only decision, Phase D tuning, what was rejected
   09-nano-v01-findings.md       Honest v0.1 evaluation
   10-phase-c-plan.md            The 4.86B corpus + the dual-context v0.1 baseline
+  11-v2-plan.md                 v2: multi-token prediction, then distillation from a local teacher
 kestrel/                        the model and trainer, trained and running
   config.py                     Model configs + presets (test/s/m/nano/mini)
   model.py                      Implementation: GLA hybrid, looped core, PKM, masked chunked CE
@@ -74,6 +75,7 @@ requirements.txt
 - [x] **SFT set + loss masking** — 23,289 examples / 16.2M tokens (`data_sft/`), built for a 4k context, using the exact template pretraining already saw. Loss is scored on Assistant tokens only; **43% of SFT tokens are prompt**, so without masking half the compute teaches the model to ask questions
 - [ ] **Context extension to 4k** — only 5 of 20 blocks carry RoPE (the 15 GLA blocks are NoPE and length-agnostic), so ~75% of the model is already 4k-ready. Must run **before** SFT
 - [ ] **Phase E/F** — run the SFT, validate Roost's teach-me-today, then quantize & ship
+- [ ] **v2** ([docs/11](docs/11-v2-plan.md)) — stop buying quality with wall-clock and buy it with **signal per token**: switch on the **multi-token-prediction head** (built since day one, never run) and ablate it, then **distil from a local quantized teacher** (Qwen2.5-Coder-1.5B, top-k logits precomputed once over a curated subset). VLM deferred behind both
 
 ### Trained artifacts (not in this repo)
 `ckpt.pt` (1.4 GB) and the tokenized corpora (~2 GB) exceed GitHub's limits and are kept
