@@ -6,6 +6,39 @@ the run AFTER v0.2 — not a change to anything currently running.*
 **Constraint: local only** (docs/08 §0b). Every number here is priced in days on
 the RTX 3060 at the measured 4,100 tok/s, never in dollars.
 
+## In plain terms
+
+**v0.2 will be undertrained, and training longer can't fix it.** It will have seen
+~19 tokens per parameter; the best small models see thousands. Closing that gap
+locally would take months, and the dataset runs out of fresh material around 20B
+tokens anyway.
+
+**So v2 doesn't train longer. It learns more from each token.** Two ways, in order:
+
+1. **Turn on multi-token prediction.** The model currently learns to predict the
+   next word. With MTP it also predicts the word after that, which gets more
+   learning out of the same data - roughly 20-50% more. The code already exists and
+   has never been switched on. One catch: switching it on breaks the memory trick
+   that lets training fit in 12 GB, so that gets fixed first. Then run it both ways
+   and keep it only if it actually wins.
+
+2. **Distillation - the big one.** Instead of learning only from raw text,
+   Kestrel-Nano learns from a bigger model's *opinions*: not just "the next word is
+   X", but "X is most likely, Y is plausible, Z is wrong". That is far richer
+   information per token, and it is the main reason the best tiny models are as good
+   as they are - potentially 2-10x more efficient.
+   - Teacher: **Qwen2.5-Coder-1.5B** - ~10x bigger than Kestrel, good at code, small
+     enough for this card.
+   - **Record its opinions once, in advance** (~4 days, ~32 GB of disk) rather than
+     running it alongside training, which would make every run ~4x slower forever.
+
+**Image understanding comes after both**, so it is built on the better model.
+
+**One line:** v0.2 proves the architecture works; v2 makes it smarter without months
+of training, by learning from a bigger model instead of only from raw text.
+
+---
+
 ## The thesis
 
 v0.2 will finish at ~19 tokens/parameter. SmolLM2-135M saw ~15,000. We cannot close
