@@ -1,29 +1,29 @@
 {
  "examples": {
-  "val": 475,
-  "train": 23289
+  "val": 485,
+  "train": 23779
  },
  "tokens": {
-  "val": 334270,
-  "train": 16209943
+  "val": 346010,
+  "train": 16217297
  },
  "seq": 4096,
  "template": "System:/User:/Assistant:/Tool: joined by blank lines, terminated with <|endoftext|>",
  "mask": "uint8 parallel to tokens; 1 = compute loss (Assistant only)",
  "length": {
   "val": {
-   "median": 573,
-   "p90": 1494,
-   "max": 3151,
-   "pct_ge_1024": 28.0,
-   "pct_ge_2048": 2.5
+   "median": 581,
+   "p90": 1466,
+   "max": 3282,
+   "pct_ge_1024": 27.6,
+   "pct_ge_2048": 3.9
   },
   "train": {
-   "median": 550,
-   "p90": 1492,
+   "median": 536,
+   "p90": 1483,
    "max": 4071,
-   "pct_ge_1024": 27.2,
-   "pct_ge_2048": 2.9
+   "pct_ge_1024": 26.7,
+   "pct_ge_2048": 2.8
   }
  },
  "per_source": {
@@ -35,6 +35,7 @@
   "tool:hermes-sgl": 1000,
   "tool:hermes-fc": 750,
   "sec:dpo": 951,
+  "identity": 500,
   "refusal": 1250,
   "plan": 1250
  },
