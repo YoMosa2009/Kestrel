@@ -239,9 +239,18 @@ costs are the training run + prep/engineering time.
 - **The corpus is on a 5400-rpm HDD** (S:, ST1000LM024) with a 9.1 GB working set against
   ~5.8 GB of free RAM. Measured ~2.4 s/step (~5%) of serialized read time; `--prefetch N`
   overlaps it with compute.
-## 0b. LOCAL ONLY (decision, 2026-09-14)
+## 0b. COMPUTE POLICY (local-only imposed 2026-09-14, **LIFTED 2026-09-17**)
 
-**No cloud compute. Every phase runs on the RTX 3060 until the user says otherwise.**
+**Two machines now, each for what it is good at.** The RTX 3060 remains the
+workhorse for long continuous training; a Colab A100 (via the user's Google AI Pro
+subscription, ~200 compute units/month ~ **15-16 A100-hours**) handles burst jobs
+that 12 GB cannot hold. See §0c.
+
+*Historical note: between 2026-09-14 and 2026-09-17 the plan was strictly local, and
+the paragraph below reflects that. Paid GPU RENTAL (RunPod etc.) is still not part
+of the plan - the lift covers the Colab subscription only.*
+
+**~~No cloud compute. Every phase runs on the RTX 3060 until the user says otherwise.~~**
 
 This supersedes the cloud lines throughout docs/01, docs/03, docs/07 and §4 below.
 Those sections are kept for the reasoning they record, but their cloud budgets and
@@ -285,6 +294,33 @@ unverified. So under a local-only constraint the two-tier Nano+Mini family becom
 
 That is not a bad outcome for the thesis: docs/08 §0 already argues the sub-200M
 niche is the sharp end of the mission, and Nano is the model that occupies it.
+
+## 0c. Colab A100 — what it is for (2026-09-17)
+
+| | RTX 3060 12 GB | Colab A100 40 GB |
+|---|---|---|
+| cost | electricity | ~12-13 units/hr of 200/mo = ~15-16 h/month |
+| availability | unlimited, uninterrupted | **not guaranteed** - may hand you an L4 or T4, both of which are NO faster than the 3060 for Kestrel |
+| session | unlimited | time-limited, disconnects |
+| best at | long continuous training | short bursts, and anything 12 GB cannot hold |
+
+**It is not a way to buy more pretraining tokens.** 15-16 A100-hours is only a few
+days of local output. Its value is doing what 12 GB *cannot*:
+
+1. **The v2 teacher-logit precompute** (docs/11) - the single biggest win, ~11
+   estimated A100-hours, saves ~4 local days, output lands straight in the 5 TB Drive.
+2. **Two things this doc previously recorded as permanently unmeasurable**, both of
+   which OOM at 12 GB and fit in 40 GB:
+   - dropping gradient checkpointing (worth ~25-30% if it holds up)
+   - the MTP head's full-vocab logits - which means the MTP **ablation can be run on
+     Colab BEFORE doing the chunked-CE engineering** that docs/11 lists as its
+     blocker. If MTP does not win, that work is never needed at all.
+3. **Measuring, generally.** Every A100 figure in docs/11 is an estimate derived from
+   local TFLOP/s. A ~20-minute `scripts/bench_step.py` run replaces them with
+   measurements before a month of units is committed.
+
+Backups also live on the same subscription's 5 TB Drive: `I:\My Drive\Kestrel\`
+holds the v0.1 and Phase D checkpoints, the SFT set, and the run records.
 
 ### Phase D tuning: what was measured, and what did NOT work (2026-09-12)
 

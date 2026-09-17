@@ -3,8 +3,21 @@
 *Written 2026-09-16, while v0.2 (Phase D) is still training. This is the plan for
 the run AFTER v0.2 — not a change to anything currently running.*
 
-**Constraint: local only** (docs/08 §0b). Every number here is priced in days on
-the RTX 3060 at the measured 4,100 tok/s, never in dollars.
+**Compute: two machines** (docs/08 §0b/§0c). The RTX 3060 does long continuous
+training; a Colab A100 (~15-16 h/month from the Google AI Pro subscription) does
+burst jobs that 12 GB cannot hold. Local work is priced in days at the measured
+4,100 tok/s; Colab work in compute units.
+
+**The A100 changes two things in this plan, both for the better:**
+1. The teacher precompute drops from ~3.9 local days to **~11 estimated A100-hours**,
+   roughly one month's units, and the output goes straight to the 5 TB Drive.
+2. The **MTP ablation can run on Colab first**, because 40 GB holds the full-vocab
+   logits that OOM at 12 GB. That inverts the order below: get the answer cheaply,
+   and only do the chunked-CE engineering if MTP actually wins.
+
+Every A100 figure here is still an ESTIMATE extrapolated from local TFLOP/s. Measure
+with `scripts/bench_step.py` on a real A100 (~20 min, ~4 units) before committing a
+month of units to the precompute.
 
 ## In plain terms
 
@@ -92,8 +105,13 @@ the binding VRAM constraint on this card. So enabling MTP today means a full
 `(B*T, 49152)` logits tensor **plus a second one for the MTP head**. At batch 24 x
 seq 1024 that is ~4.8 GB per head in fp32. It will OOM.
 
-**Therefore the first task is not the ablation, it is extending
-`chunked_cross_entropy` to cover the MTP head too.** The masked-loss work already
+**On the 3060, therefore, the first task would be extending
+`chunked_cross_entropy` to cover the MTP head. But a Colab A100's 40 GB holds those
+logits uncompressed, so the ablation can run there FIRST and the engineering only
+gets done if MTP earns it.** If it does win, the chunked-CE work is still required
+before MTP can be used in local training.
+
+The original local-first framing:** The masked-loss work already
 done for SFT is the template: the function now takes an optional mask and reduces
 by its total, so adding a second target stream is a contained change.
 
