@@ -28,6 +28,11 @@ class KestrelConfig:
     n_heads: int = 6
     n_kv_heads: int = 2
     rope_theta: float = 10_000.0
+    # Position Interpolation (Chen et al. 2023): divide positions by this factor so
+    # a model trained at 1024 tokens sees 4096 positions inside the range it already
+    # knows. 1.0 = original behaviour. Only the attention blocks use RoPE; the GLA
+    # blocks are NoPE and length-agnostic, so this is the whole extension mechanism.
+    rope_scale: float = 1.0
 
     # GLA blocks
     conv_kernel: int = 4          # short depthwise causal conv before projections

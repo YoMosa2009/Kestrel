@@ -52,9 +52,9 @@ def rms_norm_headdim(x: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
     return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + eps)
 
 
-def build_rope_cache(t: int, dim: int, theta: float, device, dtype):
+def build_rope_cache(t: int, dim: int, theta: float, device, dtype, scale: float = 1.0):
     inv = 1.0 / (theta ** (torch.arange(0, dim, 2, device=device).float() / dim))
-    pos = torch.arange(t, device=device).float()
+    pos = torch.arange(t, device=device).float() / scale   # scale>1 = position interpolation
     freqs = torch.outer(pos, inv)                        # (T, dim/2)
     return freqs.cos().to(dtype), freqs.sin().to(dtype)
 
@@ -193,7 +193,8 @@ class AttnMixer(nn.Module):
         k = self.wk(x).view(B, T, self.kvh, self.hd).transpose(1, 2)
         v = self.wv(x).view(B, T, self.kvh, self.hd).transpose(1, 2)
         q, k = rms_norm_headdim(q), rms_norm_headdim(k)
-        cos, sin = build_rope_cache(T, self.hd, self.cfg.rope_theta, x.device, x.dtype)
+        cos, sin = build_rope_cache(T, self.hd, self.cfg.rope_theta, x.device, x.dtype,
+                                    self.cfg.rope_scale)
         q, k = apply_rope(q, cos, sin), apply_rope(k, cos, sin)
         if self.kvh != self.h:
             rep = self.h // self.kvh

@@ -222,6 +222,11 @@ def main():
                          "Overlaps HDD seeks with GPU compute; 3 is plenty.")
     ap.add_argument("--fused-adam", action="store_true",
                     help="use the fused CUDA AdamW kernel (one launch for all params)")
+    ap.add_argument("--rope-theta", type=float, default=None,
+                    help="override RoPE base (default: from checkpoint, else preset)")
+    ap.add_argument("--rope-scale", type=float, default=None,
+                    help="position-interpolation factor, e.g. 4 to extend a 1024-token "
+                         "model to 4096 (default: from checkpoint, else 1.0)")
     ap.add_argument("--seed", type=int, default=1337)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = ap.parse_args()
@@ -243,6 +248,32 @@ def main():
         write_status(ctl_path, command="run")
 
     cfg: KestrelConfig = PRESETS[args.preset]()
+    # Position settings must follow the CHECKPOINT, not the preset. Everything else
+    # that loads a checkpoint (generate, eval, roost) rebuilds cfg from ck["cfg"], but
+    # the trainer builds from the preset - so without this, resuming a 4k-extended
+    # model for SFT would silently fall back to 1k positions. Peeked with mmap so the
+    # 1.4 GB file is not read twice; RoPE has no parameters, so nothing else changes.
+    if os.path.exists(ckpt_path):
+        ck_cfg = None
+        for kw in ({"mmap": True}, {}):          # mmap can fail on network/FUSE mounts
+            try:
+                ck_cfg = torch.load(ckpt_path, map_location="cpu", weights_only=False,
+                                    **kw).get("cfg", {})
+                break
+            except Exception as e:
+                last_err = e
+        if ck_cfg is None:
+            print(f"  [warn] could not read rope settings from checkpoint: {last_err}")
+        else:
+            for k in ("rope_theta", "rope_scale"):
+                if k in ck_cfg:
+                    setattr(cfg, k, ck_cfg[k])
+    if args.rope_theta is not None:
+        cfg.rope_theta = args.rope_theta
+    if args.rope_scale is not None:
+        cfg.rope_scale = args.rope_scale
+    print(f"rope: theta={cfg.rope_theta:g} scale={cfg.rope_scale:g} "
+          f"(trained context ~{int(1024 * cfg.rope_scale)} tokens)")
     if args.grad_checkpoint:
         cfg.grad_checkpoint = True
     if args.loss_chunks >= 0:
