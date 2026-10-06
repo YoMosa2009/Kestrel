@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>KestrelStudio</AssemblyName>
+    <RootNamespace>Kestrel.Studio</RootNamespace>
+    <Version>0.3.0</Version>
+    <Product>Kestrel Studio</Product>
+    <Company>MalxTech</Company>
+    <ApplicationIcon>kestrel.ico</ApplicationIcon>
+    <!-- one self-contained KestrelStudio.exe: runs on any 64-bit Windows 10/11 PC, no .NET install -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <TieredPGO>true</TieredPGO>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Kestrel.Engine\Kestrel.Engine.csproj" />
+    <Resource Include="kestrel.ico" />
+  </ItemGroup>
+
+</Project>
