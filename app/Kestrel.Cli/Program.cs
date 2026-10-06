@@ -43,6 +43,12 @@ static int Parity(KestrelModel model, string fixturePath)
 {
     using var doc = JsonDocument.Parse(File.ReadAllText(fixturePath));
     bool ok = true;
+    // The fixture is float32 PyTorch. An exact (f32) export must match to ~1e-4; f16 rounding
+    // moves logits ~1e-2 and 8-bit quantization ~1e-1 - argmax agreement is the real test there.
+    var types = GgufFile.Open(model.Path).Tensors.Values.Select(t => t.Type).ToHashSet();
+    float tol = types.Contains(GgufFile.Q8_0) ? 0.5f : types.Contains(GgufFile.F16) ? 0.05f : 0.01f;
+    Console.WriteLine($"logit tolerance {tol} ({string.Join("/", types.Select(t => t switch
+        { GgufFile.F32 => "f32", GgufFile.F16 => "f16", GgufFile.Q8_0 => "q8_0", _ => t.ToString() }))})");
     foreach (var rec in doc.RootElement.GetProperty("records").EnumerateArray())
     {
         string prompt = rec.GetProperty("prompt").GetString()!;
@@ -73,7 +79,7 @@ static int Parity(KestrelModel model, string fixturePath)
             for (int t = 0; t < T; t++)
                 if (TensorPrimitives.IndexOfMax(logits.AsSpan(t * V, V)) == argWant[t]) agree++;
             double agreePct = 100.0 * agree / T;
-            bool rOk = maxDiff < 0.05f && agreePct >= 95;
+            bool rOk = maxDiff < tol && agreePct >= 95;
             ok &= rOk;
             Console.WriteLine($"  R={r}: top-32 logit max|diff| {maxDiff:F4} | argmax agree {agree}/{T} " +
                               $"({agreePct:F0}%) {(rOk ? "OK" : "FAIL")}");
