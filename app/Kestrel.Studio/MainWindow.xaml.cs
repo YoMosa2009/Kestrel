@@ -28,6 +28,7 @@ public partial class MainWindow : Window
     {
         AppPaths.Ensure();
         InitializeComponent();
+        Title = $"Kestrel Studio {AppPaths.StudioVersion}";
         _memory = new EpisodicStore(AppPaths.Memory);
         Messages.ItemsSource = _messages;
 
@@ -58,9 +59,14 @@ public partial class MainWindow : Window
 
     void RefreshModels(string? select = null)
     {
-        var entries = Directory.EnumerateFiles(AppPaths.Models, "*.gguf")
-            .Select(p => new ModelEntry(p, Path.GetFileNameWithoutExtension(p), new FileInfo(p).Length))
-            .OrderBy(e => e.Name).ToList();
+        var bundled = Directory.EnumerateFiles(AppPaths.ExeDir, "*.gguf")
+            .Select(p => new ModelEntry(p, Path.GetFileNameWithoutExtension(p), new FileInfo(p).Length, Bundled: true));
+        var library = Directory.EnumerateFiles(AppPaths.Models, "*.gguf")
+            .Select(p => new ModelEntry(p, Path.GetFileNameWithoutExtension(p), new FileInfo(p).Length));
+        // newest release first (v2 before v1), bundled copy preferred over a library duplicate
+        var entries = bundled.Concat(library)
+            .GroupBy(e => e.Name, StringComparer.OrdinalIgnoreCase).Select(g => g.First())
+            .OrderByDescending(e => e.Name, StringComparer.OrdinalIgnoreCase).ToList();
         ModelList.ItemsSource = entries;
         var pick = entries.FirstOrDefault(e => e.Path == select) ?? entries.FirstOrDefault();
         if (pick != null) ModelList.SelectedItem = pick;
@@ -86,6 +92,7 @@ public partial class MainWindow : Window
             _settings.Save();
             var c = model.Config;
             ModelName.Text = c.Name;
+            Title = $"Kestrel Studio {AppPaths.StudioVersion} — {c.Name}";
             ModelInfo.Text = $"{model.ParameterCount / 1e6:F0}M parameters · {c.NEntry}+{c.NCore}×R+{c.NExit} blocks\n" +
                              $"context {c.ContextLength:N0} tokens · trained on {c.TokensSeen / 1e9:F2}B tokens\n" +
                              $"loaded in {sw.Elapsed.TotalSeconds:F1}s · {Environment.ProcessorCount} CPU threads";

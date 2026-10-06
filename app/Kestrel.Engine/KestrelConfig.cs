@@ -10,7 +10,7 @@ public sealed class KestrelConfig
     public int ContextLength;
     public int[] PkmSites = Array.Empty<int>();
     public long TokensSeen;
-    public string Name = "Kestrel", ChatTemplate = "User: {prompt}\n\nAssistant:";
+    public string Name = "Kestrel", Version = "", ChatTemplate = "User: {prompt}\n\nAssistant:";
 
     public int HeadDim => DModel / NHeads;
     public int NBlocks => NEntry + NCore + NExit;
@@ -36,6 +36,7 @@ public sealed class KestrelConfig
             ContextLength = g.GetInt("kestrel.context_length", 1024),
             TokensSeen = g.Has("kestrel.tokens_seen") ? Convert.ToInt64(g.Metadata["kestrel.tokens_seen"]) : 0,
             Name = g.GetString("general.name", "Kestrel"),
+            Version = g.GetString("kestrel.version", ""),
             ChatTemplate = g.GetString("kestrel.chat_template", "User: {prompt}\n\nAssistant:"),
         };
     }

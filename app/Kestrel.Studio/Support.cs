@@ -12,6 +12,12 @@ namespace Kestrel.Studio;
 /// app is a single exe that can be copied to any PC.</summary>
 public static class AppPaths
 {
+    /// <summary>Release label of this build of the app (bundled with the same-numbered model).</summary>
+    public const string StudioVersion = "V1";
+
+    /// <summary>Folder the exe runs from: a .gguf shipped next to it is offered without copying.</summary>
+    public static readonly string ExeDir = AppContext.BaseDirectory;
+
     public static readonly string Root = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KestrelStudio");
     public static readonly string Models = Path.Combine(Root, "models");
@@ -72,9 +78,9 @@ public sealed class ChatMessage : INotifyPropertyChanged
     void On([CallerMemberName] string? p = null) => PropertyChanged?.Invoke(this, new(p));
 }
 
-public sealed record ModelEntry(string Path, string Name, long Bytes)
+public sealed record ModelEntry(string Path, string Name, long Bytes, bool Bundled = false)
 {
-    public string Label => $"{Name}  ({Bytes / 1e6:F0} MB)";
+    public string Label => $"{Name}  ({Bytes / 1e6:F0} MB){(Bundled ? "  · bundled" : "")}";
 }
 
 /// <summary>Live picture of one product-key-memory site: a heat-mapped nKeys × nKeys grid

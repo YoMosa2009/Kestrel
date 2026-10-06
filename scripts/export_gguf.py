@@ -128,7 +128,7 @@ def write_gguf(path: str, meta: dict, tensors: dict[str, np.ndarray], dtype: int
 
 # ------------------------------------------------------------------ kestrel
 
-def collect(ckpt_path: str, tok_path: str, name: str):
+def collect(ckpt_path: str, tok_path: str, name: str, version: str = ""):
     ck = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     cfg = ck["cfg"]
     sd = ck["model"]
@@ -159,6 +159,8 @@ def collect(ckpt_path: str, tok_path: str, name: str):
         "kestrel.tokens_seen": int(ck.get("tokens_seen", 0)),
         "kestrel.chat_template": CHAT_TEMPLATE,
     }
+    if version:
+        meta["kestrel.version"] = version          # "V1", "V2", ... shown by Kestrel Studio
     for k in ("vocab_size", "d_model", "n_entry", "n_core", "n_exit", "attn_every",
               "n_heads", "n_kv_heads", "conv_kernel", "d_ff", "r_max", "r_default",
               "pkm_n_keys", "pkm_d_key", "pkm_topk"):
@@ -215,16 +217,25 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--dtype", choices=["f32", "f16", "q8_0"], default="f16")
     ap.add_argument("--name", default="Kestrel-Nano")
+    ap.add_argument("--version", default="", help='release label stored in the file, e.g. "V1"')
     ap.add_argument("--fixture", default=None, help="also write PyTorch reference logits here")
+    ap.add_argument("--save-pt", default=None,
+                    help="also write a weights-only PyTorch checkpoint (cfg + model, no optimizer)")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = ap.parse_args()
 
-    meta, tensors, cfg = collect(args.ckpt, args.tokenizer, args.name)
+    meta, tensors, cfg = collect(args.ckpt, args.tokenizer, args.name, args.version)
     dtype = {"f32": F32, "f16": F16, "q8_0": Q8_0}[args.dtype]
     write_gguf(args.out, meta, tensors, dtype)
     n = sum(a.size for a in tensors.values())
     print(f"{args.out}: {len(tensors)} tensors, {n/1e6:.1f}M params, {args.dtype}, "
           f"{os.path.getsize(args.out)/1e6:.0f} MB, ctx {meta['kestrel.context_length']}")
+    if args.save_pt:
+        ck = torch.load(args.ckpt, map_location="cpu", weights_only=False)
+        slim = {"cfg": ck["cfg"], "model": ck["model"], "tokens_seen": ck.get("tokens_seen", 0),
+                "step": ck.get("step", 0), "version": args.version}
+        torch.save(slim, args.save_pt)
+        print(f"{args.save_pt}: weights-only checkpoint, {os.path.getsize(args.save_pt)/1e6:.0f} MB")
     if args.fixture:
         fixture(args.ckpt, args.tokenizer, args.fixture, args.device)
 
