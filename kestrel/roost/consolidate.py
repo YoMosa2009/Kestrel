@@ -328,7 +328,7 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
                 top_t: int = 2048, recall_gate: float = 0.60,
                 regression_gate: float = 2.0, eval_iters: int = 8,
                 new_frac: float = 0.5, qa: bool = True, answer_only: bool = False,
-                log_every: int = 25,
+                new_loops: int | None = None, log_every: int = 25,
                 log=print) -> ConsolidationResult:
     """Run one night of consolidation. Returns the gate decision.
 
@@ -336,7 +336,7 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
     `new_frac` sets the share of steps spent on new material vs replay, the
     new-material loss is logged, and the recall gate cues up to the answer."""
     config = dict(steps=steps, lr=lr, top_t=top_t, new_frac=new_frac, qa=qa, seq=seq,
-                  answer_only=answer_only)
+                  answer_only=answer_only, new_loops=new_loops)
     t0 = time.time()
     # loaders branch on device.type, so a CLI string like "cuda" must become a torch.device
     device = torch.device(device) if device is not None else next(model.parameters()).device
@@ -420,7 +420,9 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
         else:
             x, y = replay.get_batch()
         opt.zero_grad(set_to_none=True)
-        _, loss = model(x, targets=y, loss_mask=lm)
+        # new_loops pins the loop count on new-material steps (the gate and the app's
+        # default run at r_default); replay steps keep the stochastic R of training
+        _, loss = model(x, targets=y, loss_mask=lm, n_loops=new_loops if is_new else None)
         loss.backward()
         # confine the update to the selected rows - this is the whole safety story
         for p, m in zip(pkms, masks):
