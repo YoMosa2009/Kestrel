@@ -57,6 +57,7 @@ SWEEP = [
     # there is regression budget left for longer / wider training on 7 facts
     ("self-x2-t2048",    1200, 1e-1, 0.75, 2048,  True, True, 2),
     ("self-x2-all",      1200, 1e-1, 0.75, 16384, True, True, 2),
+    ("self-x4",          2400, 1e-1, 0.75, 16384, True, True, 2),
 ]
 
 # True statements about the model, phrased "<subject> is <answer>" so the recall
