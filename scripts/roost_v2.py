@@ -53,6 +53,10 @@ SWEEP = [
     ("r2-lr1e-1-t512",    900, 1e-1, 0.75, 512,   True, True, 2),
     ("r2-lr1e-1-all",     600, 1e-1, 0.60, 16384, True, True, 2),
     ("r2-lr5e-2-t1024",   900, 5e-2, 0.75, 1024,  True, True, 2),
+    # V2 self-knowledge build: r2-lr1e-1-t1024 reached 3/7 at +0.61% regression, so
+    # there is regression budget left for longer / wider training on 7 facts
+    ("self-x2-t2048",    1200, 1e-1, 0.75, 2048,  True, True, 2),
+    ("self-x2-all",      1200, 1e-1, 0.75, 16384, True, True, 2),
 ]
 
 # True statements about the model, phrased "<subject> is <answer>" so the recall
