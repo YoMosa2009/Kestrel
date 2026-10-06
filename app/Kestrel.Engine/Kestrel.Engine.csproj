@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>Kestrel.Engine</RootNamespace>
+    <Version>0.3.0</Version>
+    <Description>Native CPU inference for Kestrel models (.gguf, architecture "kestrel").</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Numerics.Tensors" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>

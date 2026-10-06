@@ -15,3 +15,7 @@ tokenizer/kestrel-bpe50.json
 # WPF monitor build output
 tools/KestrelMonitor/bin/
 tools/KestrelMonitor/obj/
+
+# Kestrel Studio / engine build output
+app/**/bin/
+app/**/obj/
