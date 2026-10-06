@@ -14,6 +14,9 @@ if (args.Length < 2)
     return 2;
 }
 
+if (args[0] == "tokcheck")             // kestrel tokcheck <tokenizer.json> <cases.json>
+    return TokCheck(args[1], args[2]);
+
 var sw = Stopwatch.StartNew();
 var model = KestrelModel.Load(args[1]);
 Console.WriteLine($"{model.Config.Describe()} | {model.ParameterCount / 1e6:F1}M params | " +
@@ -86,6 +89,39 @@ static int Parity(KestrelModel model, string fixturePath)
     return ok ? 0 : 1;
 
     static string Short(string s) => (s.Length > 40 ? s[..40] + "..." : s).Replace("\n", "\\n");
+}
+
+/// <summary>Tokenizer-only parity against Hugging Face ids (no model needed).</summary>
+static int TokCheck(string tokJson, string casesPath)
+{
+    using var tj = JsonDocument.Parse(File.ReadAllText(tokJson));
+    var m = tj.RootElement.GetProperty("model");
+    var vocab = m.GetProperty("vocab").EnumerateObject().ToDictionary(p => p.Value.GetInt32(), p => p.Name);
+    var tokens = Enumerable.Range(0, vocab.Count).Select(i => vocab[i]).ToArray();
+    var merges = m.GetProperty("merges").EnumerateArray()
+        .Select(e => e.ValueKind == JsonValueKind.String ? e.GetString()!
+                     : e[0].GetString() + " " + e[1].GetString()).ToArray();
+    var tok = new BpeTokenizer(tokens, merges, eotId: 0, splitDigits: true);
+
+    using var cj = JsonDocument.Parse(File.ReadAllText(casesPath));
+    int bad = 0, n = 0;
+    foreach (var c in cj.RootElement.EnumerateArray())
+    {
+        n++;
+        string text = c.GetProperty("text").GetString()!;
+        var want = c.GetProperty("ids").EnumerateArray().Select(e => e.GetInt32()).ToArray();
+        var got = tok.Encode(text).ToArray();
+        bool roundTrip = tok.Decode(got) == text;
+        if (!want.SequenceEqual(got) || !roundTrip)
+        {
+            if (++bad <= 5)
+                Console.WriteLine($"MISMATCH {JsonSerializer.Serialize(text[..Math.Min(80, text.Length)])}\n" +
+                                  $"  want {string.Join(",", want.Take(30))}\n  got  {string.Join(",", got.Take(30))}" +
+                                  $"  roundtrip={roundTrip}");
+        }
+    }
+    Console.WriteLine($"tokenizer: {n - bad}/{n} cases identical to Hugging Face");
+    return bad == 0 ? 0 : 1;
 }
 
 static void Bench(KestrelModel model, int loops)
