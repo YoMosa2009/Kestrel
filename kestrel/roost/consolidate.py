@@ -289,7 +289,7 @@ def _text_batch(tokenizer, texts, seq: int, device) -> torch.Tensor:
     return x
 
 
-def _answer_batch(tokenizer, texts, seq: int, device):
+def _answer_batch(tokenizer, texts, seq: int, device, one_per_row: bool = False):
     """Like _text_batch, plus a loss mask that scores only the ANSWER of each fact.
 
     Scoring every token spends most of the update on predicting the entity name
@@ -313,6 +313,22 @@ def _answer_batch(tokenizer, texts, seq: int, device):
         mask += [0] * len(c) + [1] * (len(a) + 1)
     if not ids:
         raise ValueError("no new material to consolidate")
+    if one_per_row:
+        # Each fact in its own row from position 0, as it is recalled and asked in chat.
+        # Packing facts back-to-back made each one learnable only in the context of the
+        # facts before it (train loss 0.003 vs 0.97 on the same sentence alone).
+        spans, start = [], 0
+        for i, t in enumerate(ids):
+            if t == 0:
+                spans.append((start, i + 1))
+                start = i + 1
+        width = max(e - s for s, e in spans)
+        x = torch.zeros(len(spans), width, dtype=torch.long, device=device)
+        m = torch.zeros(len(spans), width, dtype=torch.float32, device=device)
+        for r, (s, e) in enumerate(spans):
+            x[r, : e - s] = torch.tensor(ids[s:e], device=device)
+            m[r, : e - s] = torch.tensor(mask[s:e], dtype=torch.float32, device=device)
+        return x, m
     while len(ids) < seq + 1:
         ids, mask = ids + ids, mask + mask
     rows = max(1, len(ids) // (seq + 1))
@@ -328,7 +344,8 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
                 top_t: int = 2048, recall_gate: float = 0.60,
                 regression_gate: float = 2.0, eval_iters: int = 8,
                 new_frac: float = 0.5, qa: bool = True, answer_only: bool = False,
-                new_loops: int | None = None, log_every: int = 25,
+                new_loops: int | None = None, one_per_row: bool = False,
+                log_every: int = 25,
                 log=print) -> ConsolidationResult:
     """Run one night of consolidation. Returns the gate decision.
 
@@ -336,7 +353,7 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
     `new_frac` sets the share of steps spent on new material vs replay, the
     new-material loss is logged, and the recall gate cues up to the answer."""
     config = dict(steps=steps, lr=lr, top_t=top_t, new_frac=new_frac, qa=qa, seq=seq,
-                  answer_only=answer_only, new_loops=new_loops)
+                  answer_only=answer_only, new_loops=new_loops, one_per_row=one_per_row)
     t0 = time.time()
     # loaders branch on device.type, so a CLI string like "cuda" must become a torch.device
     device = torch.device(device) if device is not None else next(model.parameters()).device
@@ -350,7 +367,7 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
         texts += [q for it in store.items if (q := qa_form(it.text))]
     facts = [it.text for it in store.items]
     if answer_only:
-        new_x, new_m = _answer_batch(tokenizer, texts, seq, device)
+        new_x, new_m = _answer_batch(tokenizer, texts, seq, device, one_per_row)
     else:
         new_x, new_m = _text_batch(tokenizer, texts, seq, device), None
     log(f"[roost] new material: {len(store)} teachables -> {len(texts)} forms "
