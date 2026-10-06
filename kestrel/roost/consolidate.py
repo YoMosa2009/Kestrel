@@ -128,34 +128,92 @@ def _greedy(model, tokenizer, prompt: str, device, max_new: int = 24) -> str:
     return tokenizer.decode(made)
 
 
+_STOP = {"the", "a", "an", "of", "is", "are", "was", "it", "and", "to", "in"}
+
+
 def _answer_tokens(text: str) -> set[str]:
     return {w for w in "".join(c.lower() if c.isalnum() else " " for c in text).split()
-            if len(w) > 2}
+            if w not in _STOP and (len(w) > 2 or w.isdigit())}
 
 
-def recall_score(model, tokenizer, store, device, max_new: int = 24) -> float:
-    """Fraction of taught facts the model reproduces unprompted.
+def split_fact(text: str) -> tuple[str, str, str] | None:
+    """'The capital of Varnal is Dreymoor.' -> (cue, answer, question):
+    ('The capital of Varnal is', 'Dreymoor', 'What is the capital of Varnal?').
 
-    Cue the model with the first half of the statement and check whether the
-    content words of the second half come back. Crude, but it is the same crude
-    measure before and after, which is what a gate needs.
+    v1 cut every fact in half by word count, which put the cue BEFORE the entity
+    name ('The capital of' -> ?). With 50 facts sharing 5 templates the model
+    cannot know which entity is meant, so even perfect memorization scored ~0%.
+    The cue must contain the subject and stop right before the answer.
     """
-    if len(store) == 0:
-        return 0.0
-    hits = 0
-    for it in store.items:
-        words = it.text.rstrip(".").split()
-        if len(words) < 4:
+    t = text.strip().rstrip(".")
+    for sep in (" is ", " are ", " was ", " were ", ": "):
+        i = t.rfind(sep)
+        if i > 0:
+            subject, answer = t[:i], t[i + len(sep):]
+            if not _answer_tokens(answer):
+                return None
+            cue = (subject + sep).rstrip()
+            verb = sep.strip(" :") or "is"
+            subj = (subject[0].lower() + subject[1:]
+                    if subject.startswith(("The ", "A ", "An ")) else subject)
+            return cue, answer, f"What {verb} {subj}?"
+    return None
+
+
+def qa_form(text: str) -> str | None:
+    """The fact as one chat exchange, in the SFT template the model is used through."""
+    parts = split_fact(text)
+    if parts is None:
+        return None
+    _, _, question = parts
+    return f"User: {question}\n\nAssistant: {text.strip()}"
+
+
+def _hit(want: set[str], got_text: str) -> bool:
+    return bool(want) and len(want & _answer_tokens(got_text)) / len(want) >= 0.5
+
+
+@torch.no_grad()
+def _answer_nll(model, tokenizer, cue: str, answer: str, device) -> float:
+    """Mean NLL of the answer tokens given the cue (teacher-forced). Unlike exact
+    recall this moves continuously, so it shows partial learning."""
+    c = tokenizer.encode(cue).ids
+    a = tokenizer.encode(" " + answer).ids
+    x = torch.tensor([c + a], dtype=torch.long, device=device)
+    logits, _ = model(x, targets=None)
+    lp = F.log_softmax(logits[0, len(c) - 1:-1].float(), dim=-1)
+    return float(-lp.gather(1, torch.tensor(a, device=device)[:, None]).mean())
+
+
+def recall_report(model, tokenizer, texts: list[str], device, max_new: int = 16) -> dict:
+    """Three views of whether facts are known:
+      decl  - greedy completion of the cue ('The capital of Varnal is') contains the answer
+      qa    - the chat question ('User: What is the capital of Varnal?') is answered
+      nll   - mean answer-token NLL given the cue (lower = better known)
+    """
+    was = model.training
+    model.eval()
+    n = decl = qa = 0
+    nlls = []
+    for t in texts:
+        parts = split_fact(t)
+        if parts is None:
             continue
-        cut = max(2, len(words) // 2)
-        cue, tail = " ".join(words[:cut]), " ".join(words[cut:])
-        want = _answer_tokens(tail)
-        if not want:
-            continue
-        got = _answer_tokens(_greedy(model, tokenizer, cue, device, max_new))
-        if len(want & got) / len(want) >= 0.5:
-            hits += 1
-    return hits / max(1, len(store))
+        cue, answer, question = parts
+        want = _answer_tokens(answer)
+        n += 1
+        decl += _hit(want, _greedy(model, tokenizer, cue, device, max_new))
+        qa += _hit(want, _greedy(model, tokenizer, f"User: {question}\n\nAssistant:", device, 2 * max_new))
+        nlls.append(_answer_nll(model, tokenizer, cue, answer, device))
+    if was:
+        model.train()
+    return {"n": n, "decl": decl / max(1, n), "qa": qa / max(1, n),
+            "nll": sum(nlls) / max(1, len(nlls))}
+
+
+def recall_score(model, tokenizer, store, device, max_new: int = 16) -> float:
+    """Fraction of taught facts recalled from a cue that ends right before the answer."""
+    return recall_report(model, tokenizer, [it.text for it in store.items], device, max_new)["decl"]
 
 
 @torch.no_grad()
@@ -190,11 +248,22 @@ class ConsolidationResult:
     slots_updated: int
     steps: int
     seconds: float
+    # v2 diagnostics
+    qa_before: float = 0.0
+    qa_after: float = 0.0
+    nll_before: float = 0.0
+    nll_after: float = 0.0
+    new_loss_curve: list = None          # loss on the new material, every log_every steps
+    config: dict = None
 
     def __str__(self):
         v = "ACCEPTED" if self.accepted else "ROLLED BACK"
+        curve = self.new_loss_curve or []
         return (f"[roost] {v}: {self.reason}\n"
-                f"  recall     {self.recall_before:.1%} -> {self.recall_after:.1%}\n"
+                f"  recall     {self.recall_before:.1%} -> {self.recall_after:.1%}  (cue ends before the answer)\n"
+                f"  chat Q&A   {self.qa_before:.1%} -> {self.qa_after:.1%}\n"
+                f"  answer NLL {self.nll_before:.3f} -> {self.nll_after:.3f}\n"
+                f"  new-material loss {' -> '.join(f'{l:.3f}' for l in curve[:1] + curve[-1:])}\n"
                 f"  val loss   {self.val_before:.4f} -> {self.val_after:.4f} "
                 f"({self.regression_pct:+.2f}%)\n"
                 f"  slots      {self.slots_updated} updated over {self.steps} steps "
@@ -220,8 +289,14 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
                 device=None, seq: int = 256, steps: int = 200, lr: float = 1e-3,
                 top_t: int = 2048, recall_gate: float = 0.60,
                 regression_gate: float = 2.0, eval_iters: int = 8,
+                new_frac: float = 0.5, qa: bool = True, log_every: int = 25,
                 log=print) -> ConsolidationResult:
-    """Run one night of consolidation. Returns the gate decision."""
+    """Run one night of consolidation. Returns the gate decision.
+
+    v2: `qa` adds each fact as a chat exchange (the form it will be asked in),
+    `new_frac` sets the share of steps spent on new material vs replay, the
+    new-material loss is logged, and the recall gate cues up to the answer."""
+    config = dict(steps=steps, lr=lr, top_t=top_t, new_frac=new_frac, qa=qa, seq=seq)
     t0 = time.time()
     # loaders branch on device.type, so a CLI string like "cuda" must become a torch.device
     device = torch.device(device) if device is not None else next(model.parameters()).device
@@ -231,6 +306,9 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
 
     # --- material -----------------------------------------------------------
     texts = [f for it in store.items for f in it.all_forms()]
+    if qa:
+        texts += [q for it in store.items if (q := qa_form(it.text))]
+    facts = [it.text for it in store.items]
     new_x = _text_batch(tokenizer, texts, seq, device)
     log(f"[roost] new material: {len(store)} teachables -> {len(texts)} forms "
         f"-> {new_x.shape[0]} rows")
@@ -255,8 +333,10 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
     # --- baseline -----------------------------------------------------------
     val_loaders = make_domain_val_loaders(replay_dir, seq, 4, device)
     val_before = frozen_suite(model, val_loaders, eval_iters)
-    rec_before = recall_score(model, tokenizer, store, device)
-    log(f"[roost] before: recall {rec_before:.1%}  val {val_before:.4f}")
+    rb = recall_report(model, tokenizer, facts, device)
+    rec_before = rb["decl"]
+    log(f"[roost] before: recall {rb['decl']:.1%}  qa {rb['qa']:.1%}  nll {rb['nll']:.3f}  "
+        f"val {val_before:.4f}")
 
     # --- snapshot for rollback (tens of MB) ---------------------------------
     snapshot = [p.values.weight.detach().clone() for p in pkms]
@@ -285,8 +365,12 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
     # --- train: 50% new, 50% replay ----------------------------------------
     was = model.training
     model.train()
+    curve = []
+    acc = 0.0
     for step in range(steps):
-        if step % 2 == 0:
+        # Bresenham-style interleave: exactly round(steps * new_frac) new-material steps
+        is_new = int((step + 1) * new_frac) > int(step * new_frac)
+        if is_new:
             x, y = new_x[:, :-1], new_x[:, 1:]
         else:
             x, y = replay.get_batch()
@@ -305,8 +389,11 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
         with torch.no_grad():
             for pk, snap, kp in zip(pkms, snapshot, keep):
                 pk.values.weight[kp] = snap[kp]
-        if step % 50 == 0:
-            log(f"[roost]   step {step:3d}/{steps}  loss {float(loss):.4f}")
+        if is_new:
+            acc = float(loss)
+        if step % log_every == 0 or step == steps - 1:
+            curve.append(round(acc, 4))
+            log(f"[roost]   step {step:3d}/{steps}  new-material loss {acc:.4f}")
     if not was:
         model.eval()
 
@@ -328,9 +415,11 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
 
     # --- gate ---------------------------------------------------------------
     val_after = frozen_suite(model, val_loaders, eval_iters)
-    rec_after = recall_score(model, tokenizer, store, device)
+    ra = recall_report(model, tokenizer, facts, device)
+    rec_after = ra["decl"]
     reg = 100.0 * (val_after - val_before) / max(1e-9, val_before)
-    log(f"[roost] after:  recall {rec_after:.1%}  val {val_after:.4f} ({reg:+.2f}%)")
+    log(f"[roost] after:  recall {ra['decl']:.1%}  qa {ra['qa']:.1%}  nll {ra['nll']:.3f}  "
+        f"val {val_after:.4f} ({reg:+.2f}%)")
 
     ok_recall = rec_after >= recall_gate
     ok_reg = reg <= regression_gate
@@ -357,4 +446,6 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
         accepted=accepted, reason=reason,
         recall_before=rec_before, recall_after=rec_after,
         val_before=val_before, val_after=val_after, regression_pct=reg,
-        slots_updated=n_sel, steps=steps, seconds=time.time() - t0)
+        slots_updated=n_sel, steps=steps, seconds=time.time() - t0,
+        qa_before=rb["qa"], qa_after=ra["qa"], nll_before=rb["nll"], nll_after=ra["nll"],
+        new_loss_curve=curve, config=config)
