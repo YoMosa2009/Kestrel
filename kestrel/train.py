@@ -123,12 +123,12 @@ def load_ckpt(path, model, muon, adamw, loader, device):
 
 # ----------------------------------------------------------------- probes
 
-@torch.no_grad()
 def _unpack(batch):
     """Loaders yield (x, y) or, in SFT mode, (x, y, loss_mask)."""
     return batch if len(batch) == 3 else (batch[0], batch[1], None)
 
 
+@torch.no_grad()
 def eval_val_loss(model, val_loader, iters, r):
     if val_loader is None:
         return None
