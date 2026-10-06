@@ -1,4 +1,6 @@
-# 11 — Kestrel-Nano v2: MTP, then distillation
+# 11 — Kestrel V3 plan: MTP, then distillation
+
+> **Naming (2026-10-06):** this doc was written as "v2". Release labels are now **V1** (4k + SFT + Kestrel Studio) and **V2** (Roost consolidation fixed), so the plan below is the **V3** plan. "v0.1"/"v0.2" still name the pretraining checkpoints.
 
 *Written 2026-09-16, while v0.2 (Phase D) is still training. This is the plan for
 the run AFTER v0.2 — not a change to anything currently running.*

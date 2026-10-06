@@ -39,6 +39,11 @@ SWEEP = [
     ("ans-lr3e-2",        300, 3e-2, 0.75, 8192, True,  True),
     ("ans-lr1e-1",        300, 1e-1, 0.75, 8192, True,  True),
     ("ans-lr3e-2-long",   600, 3e-2, 0.75, 8192, True,  True),
+    # after the per-loop slot-selection fix (consolidate._slot_counts): every loop's
+    # memory reads are now trainable, not just the last loop's
+    ("fix-ans-lr1e-2",    300, 1e-2, 0.75, 16384, True, True),
+    ("fix-ans-lr3e-2",    300, 3e-2, 0.75, 16384, True, True),
+    ("fix-ans-lr1e-1",    300, 1e-1, 0.75, 16384, True, True),
 ]
 
 # True statements about the model, phrased "<subject> is <answer>" so the recall

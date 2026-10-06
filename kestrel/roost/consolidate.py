@@ -65,11 +65,15 @@ def _slot_counts(model, batches, device) -> list[torch.Tensor]:
     """Activation histogram over each PKM's slots, for the given token batches."""
     pkms = _pkm_modules(model)
     counts = [torch.zeros(p.values.num_embeddings, device=device) for p in pkms]
-    captured: dict[int, torch.Tensor] = {}
+    captured: dict[int, list[torch.Tensor]] = {}
 
+    # A PKM inside the looped core runs once PER LOOP. v1 kept only the last call
+    # (captured[i] = ...), so the slots read on earlier loops were never selected -
+    # and the row restore then froze them every step. Record every call, and run
+    # at r_max so every loop the model may take (R=1..r_max) is covered.
     def mk_hook(i):
         def hook(_mod, args):
-            captured[i] = args[0].detach()
+            captured.setdefault(i, []).append(args[0].detach())
         return hook
 
     handles = [p.register_forward_pre_hook(mk_hook(i)) for i, p in enumerate(pkms)]
@@ -78,10 +82,10 @@ def _slot_counts(model, batches, device) -> list[torch.Tensor]:
         model.eval()
         for x in batches:
             captured.clear()
-            model(x.to(device), targets=None)
+            model(x.to(device), targets=None, n_loops=model.cfg.r_max)
             for i, p in enumerate(pkms):
-                if i in captured:
-                    s = pkm_slots(p, captured[i])
+                for inp in captured.get(i, []):
+                    s = pkm_slots(p, inp)
                     counts[i].scatter_add_(0, s, torch.ones_like(s, dtype=counts[i].dtype))
         if was:
             model.train()

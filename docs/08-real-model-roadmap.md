@@ -217,7 +217,7 @@ costs are the training run + prep/engineering time.
    Only 5 of 20 blocks carry RoPE; the 15 GLA blocks are NoPE and length-agnostic, so ~75% of
    the model is already 4k-ready. ~0.2-0.5B tokens, ~0.6-1 day locally.
 10. [ ] Phase E/F - run the SFT, validate teach-me-today, quantize, benchmark, Axiom.
-11. [ ] **v2 - see [docs/11](11-v2-plan.md).** v0.2 lands at ~19 tok/param against SmolLM2's
+11. [ ] **V3 (was "v2") - see [docs/11](11-v3-plan.md).** v0.2 lands at ~19 tok/param against SmolLM2's
     ~15,000, and wall-clock cannot close that (20B tokens = 48 local days and the corpus hits
     its ~4x repeat ceiling). So v2 buys signal per token instead: MTP first (built, never run,
     but `model.py:418` disables chunked CE when it is on, so the 49k-vocab logits must be
