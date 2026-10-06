@@ -376,7 +376,10 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
     shards = find_shards(replay_dir, "train")
     if not shards:
         raise FileNotFoundError(f"no replay shards under {replay_dir}")
-    replay = ShardedTokenLoader(shards, seq, max(1, new_x.shape[0]), device, seed=1234)
+    # replay matched to the new material in TOKENS, not rows: one-fact-per-row batches
+    # have ~200 short rows, and 200 full-length replay rows ran an 80 GB card out of memory
+    replay_rows = max(1, round(new_x.numel() / seq))
+    replay = ShardedTokenLoader(shards, seq, replay_rows, device, seed=1234)
 
     # --- which slots? -------------------------------------------------------
     rx, _ = replay.get_batch()
