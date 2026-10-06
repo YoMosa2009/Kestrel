@@ -223,7 +223,8 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
                 log=print) -> ConsolidationResult:
     """Run one night of consolidation. Returns the gate decision."""
     t0 = time.time()
-    device = device or next(model.parameters()).device
+    # loaders branch on device.type, so a CLI string like "cuda" must become a torch.device
+    device = torch.device(device) if device is not None else next(model.parameters()).device
     pkms = _pkm_modules(model)
     if not pkms:
         raise RuntimeError("model has no ProductKeyMemory sites; nothing to consolidate")
