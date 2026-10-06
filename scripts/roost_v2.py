@@ -90,6 +90,10 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--only", default=None, help="comma-separated sweep names to run")
+    ap.add_argument("--v2-setting", default=None,
+                    help="build V2 with this sweep setting even if no benchmark run passed; "
+                         "the V2 consolidation must still pass its OWN gate on the self facts")
+    ap.add_argument("--skip-benchmark", action="store_true")
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
     tmp = tempfile.mkdtemp()
@@ -105,6 +109,8 @@ def main():
     # ------------------------------------------------------------- 1. benchmark
     facts = novel_facts(50)
     sweep = [s for s in SWEEP if not args.only or s[0] in args.only.split(",")]
+    if args.skip_benchmark:
+        sweep = []
     for name, steps, lr, frac, top_t, qa, ans, *rest in sweep:
         loops = rest[0] if rest else None
         reset()
@@ -121,17 +127,28 @@ def main():
         json.dump(results, open(os.path.join(args.out, "results.json"), "w"), indent=1)
 
     passed = [r for r in results["benchmark"] if r["accepted"]]
-    best = (max(passed, key=lambda r: (r["recall_after"], -r["regression_pct"])) if passed
-            else max(results["benchmark"], key=lambda r: (r["recall_after"], -r["nll_after"])))
-    results["best"] = best["name"]
     results["benchmark_passed"] = bool(passed)
-    print(f"\n===== best: {best['name']} (passed gate: {bool(passed)}) =====", flush=True)
+    best = None
+    if results["benchmark"]:
+        best = (max(passed, key=lambda r: (r["recall_after"], -r["regression_pct"])) if passed
+                else max(results["benchmark"], key=lambda r: (r["recall_after"], -r["nll_after"])))
+        results["best"] = best["name"]
+        print(f"\n===== best: {best['name']} (passed gate: {bool(passed)}) =====", flush=True)
+
+    # V2 is built from a passing benchmark setting, or from --v2-setting. Either way the
+    # V2 consolidation itself must pass the same gate on the facts it teaches.
+    v2_cfg = best["config"] if passed else None
+    if args.v2_setting:
+        name, steps, lr, frac, top_t, qa, ans, *rest = next(s for s in SWEEP if s[0] == args.v2_setting)
+        v2_cfg = dict(steps=steps, lr=lr, new_frac=frac, top_t=top_t, qa=qa, answer_only=ans,
+                      new_loops=rest[0] if rest else None)
+        results["v2_setting"] = args.v2_setting
 
     # ------------------------------------------------------------- 2. build V2
     reset()
     results["v1_chat"] = chat_checks(model, tok, args.device)
-    if passed:
-        c = best["config"]
+    if v2_cfg is not None:
+        c = v2_cfg
         store = EpisodicStore(os.path.join(tmp, "self.jsonl"))
         store.extend([f for f, _ in SELF_FACTS])
         for it, (_, chats) in zip(store.items, SELF_FACTS):
@@ -160,7 +177,8 @@ def main():
         results["v2_built"] = False
     results["minutes"] = round((time.time() - t0) / 60, 1)
     json.dump(results, open(os.path.join(args.out, "results.json"), "w"), indent=1)
-    print(json.dumps({k: results[k] for k in ("best", "benchmark_passed", "v2_built", "minutes")}),
+    print(json.dumps({k: results.get(k) for k in ("best", "benchmark_passed", "v2_setting",
+                                                  "v2_built", "minutes")}),
           flush=True)
 
 
