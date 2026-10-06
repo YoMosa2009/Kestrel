@@ -285,18 +285,54 @@ def _text_batch(tokenizer, texts, seq: int, device) -> torch.Tensor:
     return x
 
 
+def _answer_batch(tokenizer, texts, seq: int, device):
+    """Like _text_batch, plus a loss mask that scores only the ANSWER of each fact.
+
+    Scoring every token spends most of the update on predicting the entity name
+    ('The capital of ___'), which 50 facts sharing 5 templates make unpredictable
+    no matter how much is learned. The answer is the part that has to be stored.
+    Texts that are not '<subject> is <answer>' statements are scored in full."""
+    ids: list[int] = []
+    mask: list[int] = []
+    for t in texts:
+        parts = split_fact(t)
+        if parts is None:
+            e = tokenizer.encode(t).ids
+            ids += e + [0]
+            mask += [1] * (len(e) + 1)
+            continue
+        cue, answer, _ = parts
+        tail = t.strip()[len(cue):]                     # ' Dreymoor.' (keeps the closing period)
+        c = tokenizer.encode(cue).ids
+        a = tokenizer.encode(tail).ids
+        ids += c + a + [0]
+        mask += [0] * len(c) + [1] * (len(a) + 1)
+    if not ids:
+        raise ValueError("no new material to consolidate")
+    while len(ids) < seq + 1:
+        ids, mask = ids + ids, mask + mask
+    rows = max(1, len(ids) // (seq + 1))
+    x = torch.tensor([ids[i * (seq + 1): (i + 1) * (seq + 1)] for i in range(rows)],
+                     dtype=torch.long, device=device)
+    m = torch.tensor([mask[i * (seq + 1): (i + 1) * (seq + 1)] for i in range(rows)],
+                     dtype=torch.float32, device=device)
+    return x, m
+
+
 def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
                 device=None, seq: int = 256, steps: int = 200, lr: float = 1e-3,
                 top_t: int = 2048, recall_gate: float = 0.60,
                 regression_gate: float = 2.0, eval_iters: int = 8,
-                new_frac: float = 0.5, qa: bool = True, log_every: int = 25,
+                new_frac: float = 0.5, qa: bool = True, answer_only: bool = False,
+                log_every: int = 25,
                 log=print) -> ConsolidationResult:
     """Run one night of consolidation. Returns the gate decision.
 
     v2: `qa` adds each fact as a chat exchange (the form it will be asked in),
     `new_frac` sets the share of steps spent on new material vs replay, the
     new-material loss is logged, and the recall gate cues up to the answer."""
-    config = dict(steps=steps, lr=lr, top_t=top_t, new_frac=new_frac, qa=qa, seq=seq)
+    config = dict(steps=steps, lr=lr, top_t=top_t, new_frac=new_frac, qa=qa, seq=seq,
+                  answer_only=answer_only)
     t0 = time.time()
     # loaders branch on device.type, so a CLI string like "cuda" must become a torch.device
     device = torch.device(device) if device is not None else next(model.parameters()).device
@@ -309,7 +345,10 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
     if qa:
         texts += [q for it in store.items if (q := qa_form(it.text))]
     facts = [it.text for it in store.items]
-    new_x = _text_batch(tokenizer, texts, seq, device)
+    if answer_only:
+        new_x, new_m = _answer_batch(tokenizer, texts, seq, device)
+    else:
+        new_x, new_m = _text_batch(tokenizer, texts, seq, device), None
     log(f"[roost] new material: {len(store)} teachables -> {len(texts)} forms "
         f"-> {new_x.shape[0]} rows")
 
@@ -370,12 +409,14 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
     for step in range(steps):
         # Bresenham-style interleave: exactly round(steps * new_frac) new-material steps
         is_new = int((step + 1) * new_frac) > int(step * new_frac)
+        lm = None
         if is_new:
             x, y = new_x[:, :-1], new_x[:, 1:]
+            lm = new_m[:, 1:] if new_m is not None else None
         else:
             x, y = replay.get_batch()
         opt.zero_grad(set_to_none=True)
-        _, loss = model(x, targets=y)
+        _, loss = model(x, targets=y, loss_mask=lm)
         loss.backward()
         # confine the update to the selected rows - this is the whole safety story
         for p, m in zip(pkms, masks):
@@ -390,7 +431,7 @@ def consolidate(model, tokenizer, store, *, replay_dir: str = "data_5b",
             for pk, snap, kp in zip(pkms, snapshot, keep):
                 pk.values.weight[kp] = snap[kp]
         if is_new:
-            acc = float(loss)
+            acc = float(loss.detach())
         if step % log_every == 0 or step == steps - 1:
             curve.append(round(acc, 4))
             log(f"[roost]   step {step:3d}/{steps}  new-material loss {acc:.4f}")
