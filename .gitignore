@@ -19,3 +19,4 @@ tools/KestrelMonitor/obj/
 # Kestrel Studio / engine build output
 app/**/bin/
 app/**/obj/
+app/dist/
