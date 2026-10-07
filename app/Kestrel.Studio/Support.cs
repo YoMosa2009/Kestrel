@@ -13,7 +13,7 @@ namespace Kestrel.Studio;
 public static class AppPaths
 {
     /// <summary>Release label of this build of the app (bundled with the same-numbered model).</summary>
-    public const string StudioVersion = "V1";
+    public const string StudioVersion = "V2";
 
     /// <summary>Folder the exe runs from: a .gguf shipped next to it is offered without copying.</summary>
     public static readonly string ExeDir = AppContext.BaseDirectory;

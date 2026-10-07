@@ -1,12 +1,30 @@
 # Project Kestrel
 
-**A small, dense, adaptively-learning LLM architecture. Kestrel-Nano (~157M) is trained and running — a from-scratch model built for coding, CLI/terminal work, tool use and secure coding, small enough to run on nearly any computer.**
+**A small, dense, adaptively-learning LLM, built from scratch. Kestrel-Nano (157M) is released and runs natively on any Windows PC in Kestrel Studio. No Python, no GPU, no cloud.**
 
-> **Start here → [MASTER-PLAN.md](MASTER-PLAN.md)** — the self-contained plan: names (Kestrel / Fledge / Roost), how the architecture and training methodology work, how they improve on existing approaches, the phased plan, and honest risks. **Status: Kestrel-Nano v0.1 is trained.** 157M params, 1.311B tokens, on one rented RTX 3090 for ~$21 — it generates coherent text and runs locally. See [docs/09](docs/09-nano-v01-findings.md) for the honest evaluation and [docs/08](docs/08-real-model-roadmap.md) for where it goes next.
+## ⬇ Download
 
-**Focus domains:** coding, tool use, language — deliberately skill/reasoning-heavy, where a small looped-and-memory-augmented model can punch above its weight.
+| release | what's in it | get it |
+|---|---|---|
+| **Kestrel V1** | Kestrel Studio app + **Kestrel-Nano V1** (4k context, instruction-tuned) | [Releases → v1.0.0](https://github.com/YoMosa2009/Kestrel/releases/tag/v1.0.0): `Kestrel-V1-Windows-x64.zip` |
+| **Kestrel V2** | V1 + **Roost consolidation fixed**: the model can learn new facts after training | [Releases → v2.0.0](https://github.com/YoMosa2009/Kestrel/releases/tag/v2.0.0): `Kestrel-V2-Windows-x64.zip` |
 
-A kestrel is a small falcon that hunts by hovering — reading the wind and adjusting continuously. That is the design thesis: a small model that stays light but *adapts in place*, instead of a frozen giant.
+Unzip and run `KestrelStudio.exe`. The bundled model loads automatically. It runs on any 64-bit Windows 10/11 PC.
+
+**Naming:** **V1** and **V2** are the public releases. `v0.1`/`v0.2` name the internal pretraining checkpoints, and the next model plan ([docs/11](docs/11-v3-plan.md): multi-token prediction plus distillation) is **V3**.
+
+### Kestrel-Nano V1 at a glance
+- **Architecture:** 157.2M parameters. A gated-linear-attention hybrid (15 linear-attention + 5 attention blocks), a looped core (R=1–3, "thinking depth") and 2 product-key-memory sites (16,384 slots each).
+- **Training:** 3.23B tokens. Pretraining 3.0B ([docs/10](docs/10-phase-c-plan.md)), then context extension 1k → 4k by position interpolation, then SFT on 23.8k examples. Trained on an RTX 3060 and Colab A100.
+- **Evals vs v0.2:** loss at positions 3k–4k 1.868 → **1.580**; val loss at 1k 1.770 → **1.771** (no regression); two-hop composition 15% → **45%**; verbatim copying 3.75% → **0%**.
+- **Native engine:** `app/Kestrel.Engine` is a C# port, checked against PyTorch: max |Δlogit| 0.0002 (f32) / 0.018 (f16), and the same top token as PyTorch 100% of the time. The tokenizer matches Hugging Face on 319/319 test strings. See [app/README.md](app/README.md).
+- **Limits:** it's a 157M model. It hallucinates confidently, and its 3-digit arithmetic is 0%.
+
+> Background reading: **[MASTER-PLAN.md](MASTER-PLAN.md)** has the full plan (names Kestrel / Fledge / Roost, architecture, training methodology, risks). [docs/09](docs/09-nano-v01-findings.md) is the honest v0.1 evaluation, and [docs/12](docs/12-roost-v2.md) covers the Roost V2 fix.
+
+**Focus domains:** coding, tool use, language. These are deliberately skill- and reasoning-heavy, where a small looped, memory-augmented model can punch above its weight.
+
+A kestrel is a small falcon that hunts by hovering: reading the wind and adjusting continuously. That is the design thesis. A small model that stays light but *adapts in place*, instead of a frozen giant.
 
 ## Why this project exists
 
@@ -38,7 +56,8 @@ docs/
   08-real-model-roadmap.md      The forward plan: local-only decision, Phase D tuning, what was rejected
   09-nano-v01-findings.md       Honest v0.1 evaluation
   10-phase-c-plan.md            The 4.86B corpus + the dual-context v0.1 baseline
-  11-v3-plan.md                 v2: multi-token prediction, then distillation from a local teacher
+  11-v3-plan.md                 V3 plan: multi-token prediction, then distillation from a local teacher
+  12-roost-v2.md                Roost V2: what was wrong with consolidation, the fixes, the measurements
 kestrel/                        the model and trainer, trained and running
   config.py                     Model configs + presets (test/s/m/nano/mini)
   model.py                      Implementation: GLA hybrid, looped core, PKM, masked chunked CE
@@ -54,6 +73,13 @@ scripts/
   stopping_point.py             fits the loss curve to find where more training stops paying
   eval_generalization.py        the scoreboard — always compare at a matched --seq
   roost.py                      teach / ask / sleep / teach-me-today / absorb
+  roost_v2.py                   Roost V2 benchmark sweep + builds Kestrel-Nano V2
+  export_gguf.py                checkpoint -> .gguf (arch "kestrel"; f32/f16/q8_0) + parity fixture
+  eval_context.py               loss by position out to 4k
+notebooks/
+  kestrel_colab.ipynb           Colab A100: 4k context extension -> SFT -> Roost -> release export
+  kestrel_v2_roost.ipynb        Colab: Roost V2 sweep + V2 build, from the public release (no Drive)
+app/                            Kestrel Studio (WPF) + Kestrel.Engine (native C# inference) + kestrel CLI
 tools/KestrelMonitor/           WPF live monitor: charts, probes, Pause/Resume/Stop
 monitor.cmd                     launches it
 requirements.txt
@@ -70,18 +96,20 @@ requirements.txt
 - [x] **Phase C complete** ([docs/10](docs/10-phase-c-plan.md)) — **4.86B-token dataset** (`data_5b/`, 30 per-domain shards): StarCoderData x10 languages, **shell/PowerShell/cmd**, git-commits + GitHub issues, FineMath, SmolTalk, tool-calling, secure-coding. Plus **curriculum staging + anneal** in the trainer and a **generalization eval suite** with v0.1 baselined as the control
 - [x] **Hardware change** (2026-08-27) — lab GPU is now an **RTX 3060 12 GB (Ampere)**. bf16 gives **1.95x** the GTX 1080 (fp32 alone is only 1.17x). Local Phase D: **3B tokens in ~8.5 days**. See [docs/08 §3b](docs/08-real-model-roadmap.md)
 - [x] **LOCAL ONLY** (2026-09-14) — no cloud compute for any phase until that changes. Supersedes every cloud budget in docs/01/03/07 and docs/08 §4; **Kestrel-Mini is shelved** (~87 days locally). See [docs/08 §0b](docs/08-real-model-roadmap.md)
-- [ ] **Phase D — RUNNING** ([runbook §4](NANO_RUNBOOK.md)) — target **3.00B cumulative** (19 tok/param), ~3.9 days on the RTX 3060 at a measured **4,100 tok/s**, WSD anneal over the final 15%. Shortened from 4.31B at the loss-curve knee: past 3B the gain per day halves (`scripts/stopping_point.py`). Live val_mean **1.96 vs the 2.5229 control**, biggest gains on `sec` −1.22, `tool` −0.96, `cli` −0.93
+- [x] **Phase D, done (v0.2)**: **3.00B cumulative tokens** on the RTX 3060 (step 18590). val_mean @1024 **1.770 vs the 2.523 v0.1 control**
 - [x] **Roost built** (`kestrel/roost/`) — episodic store with template paraphrases, GLA session-state serialize/restore, and the eval-gated nightly consolidation job. Slot containment is enforced **structurally**, not by optimizer settings: AdamW's weight decay updates every row regardless of gradient, so gradient masking alone silently writes to all 32k slots
 - [x] **SFT set + loss masking** — 23,289 examples / 16.2M tokens (`data_sft/`), built for a 4k context, using the exact template pretraining already saw. Loss is scored on Assistant tokens only; **43% of SFT tokens are prompt**, so without masking half the compute teaches the model to ask questions
-- [ ] **Context extension to 4k** — only 5 of 20 blocks carry RoPE (the 15 GLA blocks are NoPE and length-agnostic), so ~75% of the model is already 4k-ready. Must run **before** SFT
-- [ ] **Phase E/F** — run the SFT, validate Roost's teach-me-today, then quantize & ship
-- [ ] **v2** ([docs/11](docs/11-v3-plan.md)) — stop buying quality with wall-clock and buy it with **signal per token**: switch on the **multi-token-prediction head** (built since day one, never run) and ablate it, then **distil from a local quantized teacher** (Qwen2.5-Coder-1.5B, top-k logits precomputed once over a curated subset). VLM deferred behind both
+- [x] **Context extension to 4k** (Colab A100, 2026-10-05): position interpolation ×4 + 1,000 steps (0.2B tokens). Only the 5 attention blocks carry RoPE; the 15 GLA blocks are NoPE and length-agnostic. Loss at 3k–4k **1.868 → 1.580**, no regression at 1k (1.770 → 1.771)
+- [x] **SFT + release: Kestrel V1** (2026-10-06): 165 steps at seq 4096 on the masked SFT set (val 0.97). Exported to `.gguf` and shipped with **Kestrel Studio**, a native WPF app with a C# engine checked against PyTorch ([v1.0.0](https://github.com/YoMosa2009/Kestrel/releases/tag/v1.0.0))
+- [x] **Kestrel V2: Roost consolidation**: V1's consolidation learned nothing, and its test couldn't have shown it if it had. Fixed and measured in [docs/12](docs/12-roost-v2.md): V1 recalled **0%** of taught facts. V2's consolidation recalls **100%** of the 7 self-facts it was taught (answer NLL 3.26 → 0.001) at **+0.04%** regression, with every non-memory weight bit-identical. The 50-fact nonsense benchmark reaches 40% (gate 60%), so that one is **not passed yet** ([v2.0.0](https://github.com/YoMosa2009/Kestrel/releases/tag/v2.0.0))
+- [ ] **V3** ([docs/11](docs/11-v3-plan.md)): stop buying quality with wall-clock and buy it with **signal per token**. Switch on the **multi-token-prediction head** (built since day one, never run) and ablate it, then **distil from a local quantized teacher** (Qwen2.5-Coder-1.5B, top-k logits precomputed once over a curated subset). VLM deferred behind both
 
-### Trained artifacts (not in this repo)
-`ckpt.pt` (1.4 GB) and the tokenized corpora (~2 GB) exceed GitHub's limits and are kept
-locally. The corpora are reproducible with `scripts/prepare_data.py`; the tokenizer
-(`tokenizer/kestrel-bpe.json`) **is** committed, so a checkpoint can be loaded and run
-with `python -m kestrel.generate --interactive`.
+### Trained artifacts
+Model files are attached to the [GitHub releases](https://github.com/YoMosa2009/Kestrel/releases),
+not committed: `.gguf` (f16 / q8_0) for Kestrel Studio, plus `kestrel-nano-v1-weights.pt`
+(PyTorch: cfg + state dict) for `python -m kestrel.generate --ckpt ... --interactive`, and
+`roost-data.zip` (the Roost benchmark's replay and validation shards). The full training
+corpora (~10 GB) stay local; they're reproducible with `scripts/prepare_data_v2.py`.
 
 ## Ground rules baked into every decision
 
