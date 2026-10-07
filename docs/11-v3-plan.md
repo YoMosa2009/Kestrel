@@ -54,6 +54,58 @@ of training, by learning from a bigger model instead of only from raw text.
 
 ---
 
+## 0. What V2 does in real use (field observations, 2026-10-07)
+
+Chatting with Kestrel-Nano V2 in Kestrel Studio (R=2, temp 0.4–0.7):
+
+| what happened | example | likely cause |
+|---|---|---|
+| **Refuses greetings** | "Hi" → "I'm sorry, but I'm unable to assist with that… web development"; "Hello" → "I can't assist with that. Could you please provide me with a username?" | the SFT set has a 5% refusal slice but almost no greetings or small talk, so short, ambiguous inputs land in refusal mode. The test system prompt's "if you do not know, say so" pushed further in that direction |
+| **Echoes instead of answering** | "What is the biggest animal?" → "The largest animal in the world." | weak world knowledge (the `know` domain loss is still ~2.1) plus SFT answers that are often terse. The model copies the question's shape when it has no content to add |
+| **Code shape right, details wrong** | correct `add_two_numbers`, but an unused `import math` and `# Output: 4` for `1 + 2` | it predicts plausible code text without executing anything. 3-digit arithmetic is 0%, so any number it states is a guess |
+| **Repeats one stock line** | the same "I'm not sure… could you remind me?" for every question | a refusal-shaped reply, once in the chat history, keeps pulling the next reply toward it (worse with Roost memory recall on) |
+| **High variance; needs constant sampling tweaks** | the same question gives very different answers run to run | a 157M model's next-token distribution is flat: many continuations score about the same, so sampling decides more than the model does |
+
+**What this means for V3.** Most of these are **data and signal** problems, not decoding
+problems. Sampling settings can only choose among what the model already finds plausible.
+
+1. **Fix the SFT mix (cheapest, most visible).** Add greetings, small talk, "who are
+   you", and plain factual Q&A with complete one-to-three-sentence answers. Make refusals
+   *only* for genuinely harmful or impossible requests, never for "Hi". Add multi-turn
+   chats where the assistant recovers rather than repeating itself. Ban "Output:" comments
+   with made-up values from code examples, or make them correct.
+2. **Distillation (§2) is the main lever for hallucination and variance.** Soft targets
+   from a bigger teacher sharpen the model's distribution toward the teacher's choices,
+   which directly attacks "flat distribution → sampling-dependent answers", and they carry
+   far more knowledge per token than raw text.
+3. **More pretraining tokens: yes, but as a means, not the plan.** See the next section.
+4. **Capacity is the hard ceiling.** At 157M parameters, world knowledge will stay thin and
+   the model will still invent facts. Nothing in V3 removes that. The real fix is a bigger
+   model (the shelved ~500M Kestrel-Mini) once the recipe is right on Nano.
+5. **App defaults** (Kestrel Studio): ship the settings that worked in testing (R=2, temp ~0.5,
+   top-p 0.9, top-k 30, repetition penalty 1.1–1.15, memory recall off by default) and a
+   neutral system prompt without "say you don't know", so users don't have to tune.
+
+### Should V3 train on more tokens?
+
+Kestrel-Nano has seen 3.23B tokens, about 20 tokens per parameter: compute-optimal by the
+Chinchilla rule, but far below how today's best small models are trained (SmolLM2-135M saw
+~2T tokens). Small models keep improving well past "optimal", so **more tokens will help**:
+better fluency, fewer weird outputs, a little more knowledge. Two limits:
+
+- **Cost.** At the 3060's measured 4,100 tok/s, +5B tokens is ~14 days and +10B is ~28
+  days. On Colab A100 (~19k tok/s at seq 4096) +10B is ~150 GPU-hours, far beyond the
+  monthly units. So extra pretraining belongs on the 3060, running in the background.
+- **Diminishing returns.** Doubling tokens lowers loss modestly. It will not turn 157M into
+  a model that knows the biggest animal reliably. Spend the tokens **through the teacher**
+  (distillation, §2), where each token carries the teacher's full distribution, not just one
+  next word. The corpus also hits its ~4× repeat limit around 20B, so going far beyond
+  +10B means extending the corpus.
+
+**V3 order, revised by the field observations:** (1) SFT mix fix + app defaults, about a
+day, visible immediately; (2) MTP ablation (§1); (3) distillation over +5–10B tokens on the
+3060 (§2); (4) re-SFT, re-run Roost, ship V3.
+
 ## The thesis
 
 v0.2 will finish at ~19 tokens/parameter. SmolLM2-135M saw ~15,000. We cannot close
