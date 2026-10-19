@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="340" viewBox="0 0 1280 340" role="img" aria-labelledby="t d">
+  <title id="t">Project Kestrel</title>
+  <desc id="d">A small, dense, adaptively-learning language model built from scratch. A kestrel hovers over the wind.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0B1020"/>
+      <stop offset="0.55" stop-color="#18203A"/>
+      <stop offset="0.85" stop-color="#3B2B3F"/>
+      <stop offset="1" stop-color="#6A3B33"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.78" cy="1.02" r="0.55">
+      <stop offset="0" stop-color="#F2A65A" stop-opacity="0.55"/>
+      <stop offset="0.45" stop-color="#C8643A" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#C8643A" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bird" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E58A4B"/>
+      <stop offset="1" stop-color="#A8492A"/>
+    </linearGradient>
+    <linearGradient id="wind" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8FA3C8" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#8FA3C8" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#8FA3C8" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="frame"><rect width="1280" height="340" rx="18"/></clipPath>
+  </defs>
+  <g clip-path="url(#frame)">
+    <rect width="1280" height="340" fill="url(#sky)"/>
+    <rect width="1280" height="340" fill="url(#sun)"/>
+    <!-- stars -->
+    <g fill="#F3E6D3" opacity="0.55">
+      <circle cx="120" cy="40" r="1.2"/><circle cx="260" cy="28" r="0.9"/><circle cx="410" cy="62" r="1.1"/>
+      <circle cx="560" cy="22" r="0.8"/><circle cx="690" cy="48" r="1.3"/><circle cx="1180" cy="36" r="1"/>
+      <circle cx="1230" cy="88" r="0.8"/><circle cx="820" cy="20" r="0.9"/><circle cx="350" cy="110" r="0.7"/>
+      <circle cx="40" cy="120" r="0.9"/><circle cx="1110" cy="18" r="0.7"/>
+    </g>
+    <!-- wind streamlines: the "reading the wind" thesis -->
+    <g fill="none" stroke="url(#wind)" stroke-width="1.6" stroke-linecap="round">
+      <path d="M560 250 C 700 230, 820 262, 960 240 S 1180 226, 1280 236"/>
+      <path d="M600 276 C 740 258, 860 290, 1000 268 S 1200 256, 1290 262" opacity="0.7"/>
+      <path d="M520 222 C 660 206, 790 236, 930 214 S 1150 200, 1280 208" opacity="0.5"/>
+      <path d="M660 300 C 800 286, 900 312, 1040 294 S 1220 284, 1290 290" opacity="0.45"/>
+      <path d="M700 160 C 820 150, 900 170, 1020 156 S 1200 146, 1280 152" opacity="0.35"/>
+    </g>
+    <!-- horizon ridge -->
+    <path d="M0 318 L120 300 L210 312 L330 292 L470 310 L600 296 L720 314 L860 298 L990 312 L1120 294 L1280 308 L1280 340 L0 340 Z" fill="#120F1C" opacity="0.9"/>
+    <!-- hovering kestrel: wings raised, tail fanned (geometric silhouette) -->
+    <g transform="translate(985 172)">
+      <path d="M-8 -6 C -40 -34, -96 -58, -168 -66 C -150 -54, -128 -40, -112 -30 C -92 -18, -60 -4, -30 6 C -20 10, -12 12, -6 12 Z" fill="url(#bird)"/>
+      <path d="M8 -6 C 40 -34, 96 -58, 168 -66 C 150 -54, 128 -40, 112 -30 C 92 -18, 60 -4, 30 6 C 20 10, 12 12, 6 12 Z" fill="url(#bird)"/>
+      <path d="M-168 -66 C -150 -54, -128 -40, -112 -30 C -116 -40, -124 -50, -132 -56 C -144 -62, -156 -65, -168 -66 Z" fill="#2B1C1E"/>
+      <path d="M168 -66 C 150 -54, 128 -40, 112 -30 C 116 -40, 124 -50, 132 -56 C 144 -62, 156 -65, 168 -66 Z" fill="#2B1C1E"/>
+      <g stroke="#7A3520" stroke-opacity="0.55" stroke-width="1.2" fill="none" stroke-linecap="round">
+        <path d="M-40 -16 L -70 -10"/><path d="M-70 -28 L -100 -22"/><path d="M40 -16 L 70 -10"/><path d="M70 -28 L 100 -22"/>
+      </g>
+      <path d="M-7 24 L -22 80 L 22 80 L 7 24 Z" fill="#C46A3B"/>
+      <path d="M-20 70 L 20 70 L 22 80 L -22 80 Z" fill="#2B1C1E"/>
+      <path d="M0 -22 C 11 -22, 13 -8, 12 8 C 11 22, 6 30, 0 32 C -6 30, -11 22, -12 8 C -13 -8, -11 -22, 0 -22 Z" fill="#D27A45"/>
+      <circle cx="0" cy="-27" r="9" fill="#8FA3C8"/>
+      <path d="M-2.5 -20 L 0 -15 L 2.5 -20 Z" fill="#E8C66A"/>
+      <g fill="#7A3520" opacity="0.65"><circle cx="-4" cy="4" r="1.2"/><circle cx="4" cy="8" r="1.2"/><circle cx="-2" cy="14" r="1.1"/><circle cx="4" cy="19" r="1"/></g>
+    </g>
+    <!-- wordmark -->
+    <text x="72" y="132" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="78" font-weight="800" letter-spacing="10" fill="#F3E6D3">KESTREL</text>
+    <rect x="76" y="152" width="64" height="4" rx="2" fill="#E58A4B"/>
+    <text x="74" y="194" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="22" fill="#C9D3E8">A small, dense, adaptively-learning LLM, built from scratch.</text>
+    <text x="74" y="224" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="16" fill="#8FA3C8">Stays light. Adapts in place.</text>
+    <!-- chips -->
+    <g font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="13" fill="#F3E6D3">
+      <rect x="74" y="252" width="132" height="30" rx="15" fill="#F3E6D3" fill-opacity="0.08" stroke="#E58A4B" stroke-opacity="0.6"/>
+      <text x="140" y="272" text-anchor="middle">157M params</text>
+      <rect x="216" y="252" width="124" height="30" rx="15" fill="#F3E6D3" fill-opacity="0.08" stroke="#E58A4B" stroke-opacity="0.6"/>
+      <text x="278" y="272" text-anchor="middle">4k context</text>
+      <rect x="350" y="252" width="168" height="30" rx="15" fill="#F3E6D3" fill-opacity="0.08" stroke="#E58A4B" stroke-opacity="0.6"/>
+      <text x="434" y="272" text-anchor="middle">native C# engine</text>
+      <rect x="528" y="252" width="128" height="30" rx="15" fill="#F3E6D3" fill-opacity="0.08" stroke="#E58A4B" stroke-opacity="0.6"/>
+      <text x="592" y="272" text-anchor="middle">no cloud</text>
+    </g>
+  </g>
+</svg>
