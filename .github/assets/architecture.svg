@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="470" viewBox="0 0 1280 470" role="img" aria-labelledby="t d">
+<title id="t">Kestrel-Nano architecture</title>
+<desc id="d">20 unique blocks: 5 entry, 10 core looped R times, 5 exit. Every 4th block is full attention (5 total), the other 15 are gated linear attention. Product-key memory sites on blocks 7 and 14, 16,384 slots each.</desc>
+<defs>
+<linearGradient id="gla" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7F95C2"/><stop offset="1" stop-color="#4F6290"/></linearGradient>
+<linearGradient id="att" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F0A060"/><stop offset="1" stop-color="#C2582E"/></linearGradient>
+<marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#C9D3E8"/></marker>
+<marker id="arA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#E58A4B"/></marker>
+</defs>
+<rect width="1280" height="470" rx="18" fill="#0F1528"/>
+<text x="40" y="48" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="700" fill="#F3E6D3">Kestrel-Nano · 157.2M parameters</text>
+<text x="40" y="74" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" fill="#8FA3C8">entry → core (looped R×) → exit · 3:1 hybrid mixer · product-key memory · d_model 640 · vocab 49,152</text>
+<rect x="36" y="212" width="140" height="80" rx="12" fill="#18203A" stroke="#2C3757"/>
+<text x="106" y="244" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="14" fill="#C9D3E8">tokens</text>
+<text x="106" y="266" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" fill="#8FA3C8">tied embedding</text>
+<line x1="178" y1="252" x2="206" y2="252" stroke="#C9D3E8" stroke-width="1.6" marker-end="url(#ar)"/>
+<rect x="1146" y="212" width="114" height="80" rx="12" fill="#18203A" stroke="#2C3757"/>
+<text x="1203" y="236" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" fill="#8FA3C8">RMSNorm</text>
+<text x="1203" y="255" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" fill="#8FA3C8">tied unembed</text>
+<text x="1203" y="276" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="14" fill="#C9D3E8">logits</text>
+<line x1="1118" y1="252" x2="1142" y2="252" stroke="#C9D3E8" stroke-width="1.6" marker-end="url(#ar)"/>
+<line x1="424" y1="252" x2="448" y2="252" stroke="#C9D3E8" stroke-width="1.6" marker-end="url(#ar)"/>
+<line x1="884" y1="252" x2="908" y2="252" stroke="#C9D3E8" stroke-width="1.6" marker-end="url(#ar)"/>
+<rect x="440" y="182" width="454" height="140" rx="14" fill="#E58A4B" fill-opacity="0.06" stroke="#E58A4B" stroke-opacity="0.55" stroke-dasharray="5 5"/>
+<path d="M 864 180 C 834 104, 500 104, 470 180" fill="none" stroke="#E58A4B" stroke-width="2.2" marker-end="url(#arA)"/>
+<rect x="549.0" y="104" width="236" height="30" rx="15" fill="#0F1528" stroke="#E58A4B"/>
+<text x="667.0" y="124" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="13.5" fill="#F3E6D3">× R  ·  R = 1–3  ·  default 2</text>
+<rect x="212" y="196" width="34" height="112" rx="8" fill="url(#gla)"/>
+<text x="229.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 229.0 252.0)">GLA</text>
+<text x="229.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">0</text>
+<rect x="256" y="196" width="34" height="112" rx="8" fill="url(#gla)"/>
+<text x="273.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 273.0 252.0)">GLA</text>
+<text x="273.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">1</text>
+<rect x="300" y="196" width="34" height="112" rx="8" fill="url(#gla)"/>
+<text x="317.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 317.0 252.0)">GLA</text>
+<text x="317.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">2</text>
+<rect x="344" y="196" width="34" height="112" rx="8" fill="url(#att)"/>
+<text x="361.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 361.0 252.0)">ATTN</text>
+<text x="361.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">3</text>
+<rect x="388" y="196" width="34" height="112" rx="8" fill="url(#gla)"/>
+<text x="405.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 405.0 252.0)">GLA</text>
+<text x="405.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">4</text>
+<rect x="452" y="196" width="34" height="112" rx="8" fill="url(#gla)"/>
+<text x="469.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 469.0 252.0)">GLA</text>
+<text x="469.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">5</text>
+<rect x="496" y="196" width="34" height="112" rx="8" fill="url(#gla)"/>
+<text x="513.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 513.0 252.0)">GLA</text>
+<text x="513.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">6</text>
+<rect x="540" y="196" width="34" height="112" rx="8" fill="url(#att)"/>
+<text x="557.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 557.0 252.0)">ATTN</text>
+<text x="557.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">7</text>
+<rect x="584" y="196" width="34" height="112" rx="8" fill="url(#gla)"/>
+<text x="601.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 601.0 252.0)">GLA</text>
+<text x="601.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">8</text>
+<rect x="628" y="196" width="34" height="112" rx="8" fill="url(#gla)"/>
+<text x="645.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 645.0 252.0)">GLA</text>
+<text x="645.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">9</text>
+<rect x="672" y="196" width="34" height="112" rx="8" fill="url(#gla)"/>
+<text x="689.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 689.0 252.0)">GLA</text>
+<text x="689.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">10</text>
+<rect x="716" y="196" width="34" height="112" rx="8" fill="url(#att)"/>
+<text x="733.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 733.0 252.0)">ATTN</text>
+<text x="733.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">11</text>
+<rect x="760" y="196" width="34" height="112" rx="8" fill="url(#gla)"/>
+<text x="777.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 777.0 252.0)">GLA</text>
+<text x="777.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">12</text>
+<rect x="804" y="196" width="34" height="112" rx="8" fill="url(#gla)"/>
+<text x="821.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 821.0 252.0)">GLA</text>
+<text x="821.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">13</text>
+<rect x="848" y="196" width="34" height="112" rx="8" fill="url(#gla)"/>
+<text x="865.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 865.0 252.0)">GLA</text>
+<text x="865.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">14</text>
+<rect x="912" y="196" width="34" height="112" rx="8" fill="url(#att)"/>
+<text x="929.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 929.0 252.0)">ATTN</text>
+<text x="929.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">15</text>
+<rect x="956" y="196" width="34" height="112" rx="8" fill="url(#gla)"/>
+<text x="973.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 973.0 252.0)">GLA</text>
+<text x="973.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">16</text>
+<rect x="1000" y="196" width="34" height="112" rx="8" fill="url(#gla)"/>
+<text x="1017.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 1017.0 252.0)">GLA</text>
+<text x="1017.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">17</text>
+<rect x="1044" y="196" width="34" height="112" rx="8" fill="url(#gla)"/>
+<text x="1061.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 1061.0 252.0)">GLA</text>
+<text x="1061.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">18</text>
+<rect x="1088" y="196" width="34" height="112" rx="8" fill="url(#att)"/>
+<text x="1105.0" y="257.0" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" font-weight="700" fill="#0F1528" transform="rotate(-90 1105.0 252.0)">ATTN</text>
+<text x="1105.0" y="336" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#6F7FA3">19</text>
+<line x1="557.0" y1="342" x2="557.0" y2="350" stroke="#7FD1B9" stroke-width="1.6"/>
+<rect x="503.0" y="348" width="108" height="40" rx="9" fill="#123A35" stroke="#7FD1B9"/>
+<text x="557.0" y="365" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700" fill="#BFF0E1">PKM site</text>
+<text x="557.0" y="381" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#7FD1B9">16,384 slots</text>
+<line x1="865.0" y1="342" x2="865.0" y2="350" stroke="#7FD1B9" stroke-width="1.6"/>
+<rect x="811.0" y="348" width="108" height="40" rx="9" fill="#123A35" stroke="#7FD1B9"/>
+<text x="865.0" y="365" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700" fill="#BFF0E1">PKM site</text>
+<text x="865.0" y="381" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#7FD1B9">16,384 slots</text>
+<text x="317.0" y="172" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="2" fill="#8FA3C8">ENTRY · 5</text>
+<text x="1017.0" y="172" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="2" fill="#8FA3C8">EXIT · 5</text>
+<text x="492" y="172" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="2" fill="#E58A4B">CORE · 10</text>
+<rect x="40" y="407" width="18" height="18" rx="4" fill="url(#gla)"/>
+<text x="68" y="421" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#C9D3E8">Gated linear attention · 15 blocks · fixed-size recurrent state, NoPE</text>
+<rect x="560" y="407" width="18" height="18" rx="4" fill="url(#att)"/>
+<text x="588" y="421" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#C9D3E8">Full attention · 5 blocks · GQA + RoPE</text>
+<rect x="868" y="407" width="18" height="18" rx="4" fill="#123A35" stroke="#7FD1B9"/>
+<text x="894" y="421" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#C9D3E8">Product-key memory · the only weights Roost may write</text>
+<text x="40" y="452" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#6F7FA3">Layout from kestrel/config.py (kestrel_nano): n_entry 5, n_core 10, n_exit 5, attn_every 4, pkm_sites (7, 14), pkm_n_keys 128.</text>
+</svg>

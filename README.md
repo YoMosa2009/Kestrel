@@ -1,3 +1,16 @@
+<p align="center">
+  <img src=".github/assets/banner.svg" alt="Project Kestrel: a small, dense, adaptively-learning LLM built from scratch" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/YoMosa2009/Kestrel/releases/tag/v2.0.0"><img alt="Release V2" src="https://img.shields.io/badge/release-V2.0.0-E58A4B?style=flat-square"></a>
+  <img alt="Kestrel-Nano 157M" src="https://img.shields.io/badge/Kestrel--Nano-157M%20params-6F8FD8?style=flat-square">
+  <img alt="Context 4k" src="https://img.shields.io/badge/context-4k-6F8FD8?style=flat-square">
+  <img alt="Windows 10/11 x64" src="https://img.shields.io/badge/runs%20on-Windows%2010%2F11%20x64-0F1528?style=flat-square">
+  <img alt="PyTorch training" src="https://img.shields.io/badge/training-PyTorch-0F1528?style=flat-square">
+  <img alt=".NET 8 engine" src="https://img.shields.io/badge/engine-.NET%208%20%2F%20C%23-0F1528?style=flat-square">
+</p>
+
 # Project Kestrel
 
 **A small, dense, adaptively-learning LLM, built from scratch. Kestrel-Nano (157M) is released and runs natively on any Windows PC in Kestrel Studio. No Python, no GPU, no cloud.**
@@ -20,6 +33,8 @@ Unzip and run `KestrelStudio.exe`. The bundled model loads automatically. It run
 - **Native engine:** `app/Kestrel.Engine` is a C# port, checked against PyTorch: max |Δlogit| 0.0002 (f32) / 0.018 (f16), and the same top token as PyTorch 100% of the time. The tokenizer matches Hugging Face on 319/319 test strings. See [app/README.md](app/README.md).
 - **Limits:** it's a 157M model. It hallucinates confidently, and its 3-digit arithmetic is 0%.
 
+<p align="center"><img src=".github/assets/evals.svg" alt="Bar charts: V1 vs v0.2 on loss at 3k-4k, val loss at 1k, two-hop composition and verbatim copying" width="100%"></p>
+
 > Background reading: **[MASTER-PLAN.md](MASTER-PLAN.md)** has the full plan (names Kestrel / Fledge / Roost, architecture, training methodology, risks). [docs/09](docs/09-nano-v01-findings.md) is the honest v0.1 evaluation, and [docs/12](docs/12-roost-v2.md) covers the Roost V2 fix.
 
 **Focus domains:** coding, tool use, language. These are deliberately skill- and reasoning-heavy, where a small looped, memory-augmented model can punch above its weight.
@@ -34,6 +49,9 @@ A kestrel is a small falcon that hunts by hovering: reading the wind and adjusti
 
 ## The five pillars (v0.1)
 
+<p align="center"><img src=".github/assets/architecture.svg" alt="Kestrel-Nano architecture: 5 entry, 10 looped core and 5 exit blocks; every 4th block is attention; PKM sites on blocks 7 and 14" width="100%"></p>
+
+
 | # | Pillar | What it buys us | Key evidence |
 |---|--------|-----------------|--------------|
 | 1 | **Hybrid sequence mixer** — 3 gated linear-attention blocks : 1 full-attention block | O(1) inference state per token, long context on 8 GB, persistent "mind-state" | Qwen3-Next, Kimi Linear, Samba |
@@ -41,6 +59,8 @@ A kestrel is a small falcon that hunts by hovering: reading the wind and adjusti
 | 3 | **Product-key memory layers** — large sparse key-value banks | Knowledge capacity without FLOPs; the *plastic tissue* for continual learning | Meta Memory Layers at Scale; Sparse Memory Finetuning (11% forgetting vs 89% full-FT) |
 | 4 | **Token efficiency** — superword BPE tokenizer + multi-token-prediction aux head | ~20–30% more text per FLOP and per context window; speculative decoding later | SuperBPE (COLM 2025) |
 | 5 | **Layered memory & consolidation** — context → recurrent state → memory slots → nightly sparse consolidation | A model that *learns from use* without catastrophic forgetting | Titans, SEAL, Meta sparse-memory-FT |
+
+<p align="center"><img src=".github/assets/memory-hierarchy.svg" alt="Memory hierarchy: working, session, episodic, semantic and core-competence tiers, with Roost consolidating episodic facts into memory slots" width="100%"></p>
 
 ## Repository map
 
@@ -87,6 +107,9 @@ requirements.txt
 
 ## Status
 
+<p align="center"><img src=".github/assets/timeline.svg" alt="Timeline from the research sweep in July 2026 to Kestrel V1 and V2 in October 2026, with V3 planned" width="100%"></p>
+
+
 - [x] Research sweep (2026-07-19)
 - [x] Design docs 01–07 + [MASTER-PLAN.md](MASTER-PLAN.md)
 - [x] **Implementation** — model, trainer (Muon + WSD, resumable), memmap data pipeline, tokenizer, inference (`kestrel/`, `scripts/`); all CPU smoke tests pass
@@ -103,6 +126,8 @@ requirements.txt
 - [x] **SFT + release: Kestrel V1** (2026-10-06): 165 steps at seq 4096 on the masked SFT set (val 0.97). Exported to `.gguf` and shipped with **Kestrel Studio**, a native WPF app with a C# engine checked against PyTorch ([v1.0.0](https://github.com/YoMosa2009/Kestrel/releases/tag/v1.0.0))
 - [x] **Kestrel V2: Roost consolidation**: V1's consolidation learned nothing, and its test couldn't have shown it if it had. Fixed and measured in [docs/12](docs/12-roost-v2.md): V1 recalled **0%** of taught facts. V2's consolidation recalls **100%** of the 7 self-facts it was taught (answer NLL 3.26 → 0.001) at **+0.04%** regression, with every non-memory weight bit-identical. The 50-fact nonsense benchmark reaches 40% (gate 60%), so that one is **not passed yet** ([v2.0.0](https://github.com/YoMosa2009/Kestrel/releases/tag/v2.0.0))
 - [ ] **V3** ([docs/11](docs/11-v3-plan.md)): stop buying quality with wall-clock and buy it with **signal per token**. Switch on the **multi-token-prediction head** (built since day one, never run) and ablate it, then **distil from a local quantized teacher** (Qwen2.5-Coder-1.5B, top-k logits precomputed once over a curated subset). VLM deferred behind both
+
+<p align="center"><img src=".github/assets/roost-recall.svg" alt="Roost recall per consolidation run against the 60% gate; the V2 one-fact-per-row build reaches 100% and passes" width="100%"></p>
 
 ### Trained artifacts
 Model files are attached to the [GitHub releases](https://github.com/YoMosa2009/Kestrel/releases),

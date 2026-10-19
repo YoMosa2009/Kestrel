@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="470" viewBox="0 0 1280 470" role="img" aria-labelledby="t d">
+<title id="t">Kestrel memory hierarchy</title>
+<desc id="d">Five tiers: working, session, episodic, semantic and core competence. Roost consolidates episodic facts into semantic memory slots; dense weights stay frozen.</desc>
+<rect width="1280" height="470" rx="18" fill="#0F1528"/>
+<text x="40" y="48" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="700" fill="#F3E6D3">A model that learns from use</text>
+<text x="40" y="74" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" fill="#8FA3C8">five memory tiers · anything learned after training is confined to memory slots, and reversible</text>
+<defs><marker id="m" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#7FD1B9"/></marker></defs>
+<text x="560" y="96" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="1.5" fill="#6F7FA3">PERSISTENCE</text>
+<text x="800" y="96" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="1.5" fill="#6F7FA3">PLASTICITY</text>
+<rect x="40" y="108" width="1040" height="56" rx="12" fill="#3A4A73" fill-opacity="0.22" stroke="#3A4A73"/>
+<rect x="40" y="108" width="8" height="56" rx="4" fill="#3A4A73"/>
+<text x="64" y="132" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="16" font-weight="700" fill="#F3E6D3">Working</text>
+<text x="64" y="152" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13" fill="#C9D3E8">attention over the context</text>
+<text x="560" y="142" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#C9D3E8">one forward pass</text>
+<text x="800" y="142" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#C9D3E8">none</text>
+<rect x="58" y="174" width="1022" height="56" rx="12" fill="#4F6290" fill-opacity="0.22" stroke="#4F6290"/>
+<rect x="58" y="174" width="8" height="56" rx="4" fill="#4F6290"/>
+<text x="82" y="198" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="16" font-weight="700" fill="#F3E6D3">Session</text>
+<text x="82" y="218" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13" fill="#C9D3E8">GLA recurrent state · saved as .kses</text>
+<text x="560" y="208" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#C9D3E8">across restarts</text>
+<text x="800" y="208" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#C9D3E8">automatic (recurrence)</text>
+<rect x="76" y="240" width="1004" height="56" rx="12" fill="#6F8FD8" fill-opacity="0.22" stroke="#6F8FD8"/>
+<rect x="76" y="240" width="8" height="56" rx="4" fill="#6F8FD8"/>
+<text x="100" y="264" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="16" font-weight="700" fill="#F3E6D3">Episodic</text>
+<text x="100" y="284" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13" fill="#C9D3E8">Roost store · episodic.jsonl, recalled into context</text>
+<text x="560" y="274" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#C9D3E8">on disk, user-ownable</text>
+<text x="800" y="274" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#C9D3E8">append-only</text>
+<rect x="94" y="306" width="986" height="56" rx="12" fill="#2E8C74" fill-opacity="0.22" stroke="#2E8C74"/>
+<rect x="94" y="306" width="8" height="56" rx="4" fill="#2E8C74"/>
+<text x="118" y="330" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="16" font-weight="700" fill="#F3E6D3">Semantic</text>
+<text x="118" y="350" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13" fill="#C9D3E8">product-key memory slots · 2 × 16,384</text>
+<text x="560" y="340" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#C9D3E8">permanent</text>
+<text x="800" y="340" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#C9D3E8">nightly sparse consolidation, eval-gated</text>
+<rect x="112" y="372" width="968" height="56" rx="12" fill="#8A4A2E" fill-opacity="0.22" stroke="#8A4A2E"/>
+<rect x="112" y="372" width="8" height="56" rx="4" fill="#8A4A2E"/>
+<text x="136" y="396" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="16" font-weight="700" fill="#F3E6D3">Core competence</text>
+<text x="136" y="416" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13" fill="#C9D3E8">dense weights</text>
+<text x="560" y="406" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#C9D3E8">permanent</text>
+<text x="800" y="406" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#C9D3E8">frozen after training, by policy</text>
+<path d="M1080 268.0 C 1150 268.0, 1150 334.0, 1080 334.0" fill="none" stroke="#7FD1B9" stroke-width="2.2" marker-end="url(#m)"/>
+<text x="1150" y="295.0" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="700" fill="#BFF0E1">Roost</text>
+<text x="1150" y="313.0" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#7FD1B9">sleep job</text>
+<text x="40" y="452" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#6F7FA3">Source: docs/04-architecture-spec.md §5 and app/README.md. Gate: recall ≥ 60% and regression ≤ 2%, otherwise roll back.</text>
+</svg>

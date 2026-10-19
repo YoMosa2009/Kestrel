@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="330" viewBox="0 0 1280 330" role="img" aria-labelledby="t d">
+<title id="t">Kestrel timeline</title>
+<desc id="d">From research sweep in July 2026 to the V1 and V2 releases in October 2026, with V3 planned.</desc>
+<rect width="1280" height="330" rx="18" fill="#0F1528"/>
+<text x="40" y="48" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="700" fill="#F3E6D3">The flight path</text>
+<text x="40" y="74" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" fill="#8FA3C8">every rung resumes the last one — no work thrown away</text>
+<line x1="90" y1="170" x2="1032.857142857143" y2="170" stroke="#E58A4B" stroke-width="3" stroke-linecap="round"/>
+<line x1="1032.857142857143" y1="170" x2="1190" y2="170" stroke="#E58A4B" stroke-width="3" stroke-dasharray="2 8" stroke-linecap="round"/>
+<circle cx="90.0" cy="170" r="6" fill="#0F1528" stroke="#E58A4B" stroke-width="2.5"/>
+<text x="90.0" y="142" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" fill="#8FA3C8">2026-07-19</text>
+<text x="90.0" y="210" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="700" fill="#F3E6D3">Research sweep</text>
+<text x="90.0" y="232" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" fill="#8FA3C8">design docs 01–07</text>
+<circle cx="247.14285714285714" cy="170" r="6" fill="#0F1528" stroke="#E58A4B" stroke-width="2.5"/>
+<text x="247.14285714285714" y="142" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" fill="#8FA3C8">2026-07-23</text>
+<text x="247.14285714285714" y="210" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="700" fill="#F3E6D3">v0.1 trained</text>
+<text x="247.14285714285714" y="232" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" fill="#8FA3C8">1.311B tokens</text>
+<text x="247.14285714285714" y="250" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" fill="#8FA3C8">val 2.310</text>
+<circle cx="404.2857142857143" cy="170" r="6" fill="#0F1528" stroke="#E58A4B" stroke-width="2.5"/>
+<text x="404.2857142857143" y="142" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" fill="#8FA3C8">2026-08-27</text>
+<text x="404.2857142857143" y="210" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="700" fill="#F3E6D3">RTX 3060</text>
+<text x="404.2857142857143" y="232" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" fill="#8FA3C8">bf16</text>
+<text x="404.2857142857143" y="250" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" fill="#8FA3C8">1.95× the GTX 1080</text>
+<circle cx="561.4285714285714" cy="170" r="6" fill="#0F1528" stroke="#E58A4B" stroke-width="2.5"/>
+<text x="561.4285714285714" y="142" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" fill="#8FA3C8">Phase D</text>
+<text x="561.4285714285714" y="210" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="700" fill="#F3E6D3">v0.2 checkpoint</text>
+<text x="561.4285714285714" y="232" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" fill="#8FA3C8">3.00B tokens</text>
+<text x="561.4285714285714" y="250" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" fill="#8FA3C8">val@1k 1.770</text>
+<circle cx="718.5714285714286" cy="170" r="6" fill="#0F1528" stroke="#E58A4B" stroke-width="2.5"/>
+<text x="718.5714285714286" y="142" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" fill="#8FA3C8">2026-10-05</text>
+<text x="718.5714285714286" y="210" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="700" fill="#F3E6D3">4k context</text>
+<text x="718.5714285714286" y="232" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" fill="#8FA3C8">position interpolation ×4</text>
+<circle cx="875.7142857142857" cy="170" r="13" fill="#E58A4B" fill-opacity="0.2"/><circle cx="875.7142857142857" cy="170" r="8" fill="#E58A4B"/>
+<text x="875.7142857142857" y="142" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" fill="#8FA3C8">2026-10-06</text>
+<text x="875.7142857142857" y="210" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="700" fill="#F3E6D3">Kestrel V1</text>
+<text x="875.7142857142857" y="232" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" fill="#8FA3C8">SFT + Kestrel Studio</text>
+<rect x="837.7142857142857" y="270" width="76" height="22" rx="11" fill="none" stroke="#E58A4B"/><text x="875.7142857142857" y="285" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#E58A4B">released</text>
+<circle cx="1032.857142857143" cy="170" r="13" fill="#E58A4B" fill-opacity="0.2"/><circle cx="1032.857142857143" cy="170" r="8" fill="#E58A4B"/>
+<text x="1032.857142857143" y="142" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" fill="#8FA3C8">Oct 2026</text>
+<text x="1032.857142857143" y="210" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="700" fill="#F3E6D3">Kestrel V2</text>
+<text x="1032.857142857143" y="232" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" fill="#8FA3C8">Roost consolidation fixed</text>
+<rect x="994.8571428571429" y="270" width="76" height="22" rx="11" fill="none" stroke="#E58A4B"/><text x="1032.857142857143" y="285" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#E58A4B">released</text>
+<circle cx="1190.0" cy="170" r="8" fill="#0F1528" stroke="#E58A4B" stroke-width="2" stroke-dasharray="3 3"/>
+<text x="1190.0" y="142" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="12" fill="#8FA3C8">next</text>
+<text x="1190.0" y="210" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="700" fill="#C9D3E8">V3</text>
+<text x="1190.0" y="232" text-anchor="middle" font-family="'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" fill="#8FA3C8">MTP head + distillation</text>
+<rect x="1152.0" y="270" width="76" height="22" rx="11" fill="none" stroke="#5A6C9A" stroke-dasharray="3 3"/><text x="1190.0" y="285" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="11" fill="#8FA3C8">planned</text>
+</svg>
