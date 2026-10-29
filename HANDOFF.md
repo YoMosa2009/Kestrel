@@ -71,8 +71,10 @@ facts into the PKM value slots only.
   and it stays English. The fallback is the Claude-in-Chrome extension in Edge (device
   "MALXPC"), where Colab dialogs freeze the extension. Do sign-in popups and native download
   prompts by hand.
-- Colab: ~6.8 units/A100-hour measured; ~18.5k tok/s training at seq 4096. **295 units left**
-  (as of 2026-10-28); Google AI Pro grants 200/month.
+- Colab: **~5.3 units/A100-hour** (Resources panel, 2026-10-28; V1-era estimate was 6.8).
+  **259 units left** after step 0 (2026-10-28; the earlier "295" was wrong). Google AI Pro
+  grants 200/month. Balance: command palette → "View resources". Always "Disconnect and
+  delete runtime" when a job ends.
 
 ## 6. The V3 plan (agreed, not started), see docs/11 "Agreed V3 plan" (body of docs/11 §1–2 is superseded)
 Problems seen in V2 chat: refuses "Hi"/"Hello"; echoes questions ("The largest animal in
@@ -93,7 +95,11 @@ on downloadable preference data (e.g. UltraFeedback) + an SFT data fix.
 | 4 | continued pretraining on 1.5–2B quality tokens from V2, low LR, resumable | ~150–200 |
 | 5 | re-SFT + DPO, Roost self-facts, export gguf, parity, app defaults (R=2, temp ~0.5, top-p 0.9, top-k 30, rep 1.1, memory recall off, neutral system prompt) → **release V3** | ~20 |
 
-With 295 units, **all of steps 0–5 fit now** (~220–270 units at 1.5–2B tokens in step 4), so V3
+**Step 0 is done** (see docs/11 "Step 0 results"): seq 4096 at batch 16 × accum 3 runs at
+17.9k tok/s (bench, all R=2), and seq 2048 is only ~9% faster. Use seq 4096. That is ~82 units
+per 1B tokens at 5.3 units/hour. Next is step 1.
+
+With 259 units, **steps 1–5 still fit** (~220–270 units at 1.5–2B tokens in step 4), so V3
 can be done in one go without waiting for a refill. Keep a ~25-unit reserve for reruns: if
 step 0's measured speed or steps 1–3 cost more than estimated, trim step 4's token count, not
 step 5's checks.

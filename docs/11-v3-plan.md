@@ -130,6 +130,30 @@ through downloadable datasets** (Cosmopedia v2, FineWeb-Edu high-score, Python-E
 | 4 | continued pretraining on 1.5–2B quality tokens from V2, low LR, resumable | ~150–200 |
 | 5 | re-SFT + DPO, Roost self-facts (step 4 changes the memory slots, so they must be re-taught), export gguf, parity, app defaults (R=2, temp ~0.5, top-p 0.9, top-k 30, rep 1.1, memory recall off, neutral system prompt) → **release V3** as one bundle (app + model) | ~20 |
 
+### Step 0 results (2026-10-28)
+
+`notebooks/kestrel_v3_step0_bench.ipynb` on an A100-SXM4-40GB, torch 2.11. Full training
+step (fwd+bwd × accum + Muon + AdamW, TF32, fused AdamW, bf16), random tokens, 196,608
+tokens/step, **every step at R=2**. Real runs mix R=1 and R=2, so they are a little faster
+(V1's ctx4k run logged ~18.5k tok/s at the config the bench shows as 17.0k).
+
+| seq | batch × accum | checkpointing | tok/s | peak GB | units / 1B tok @5.3/h |
+|---|---|---|---|---|---|
+| 4096 | 8 × 6 | every block | 16,963 | 9.6 | 87 |
+| 4096 | 16 × 3 | every block | **17,885** | 16.8 | **82** |
+| 2048 | 16 × 6 | every block | 18,858 | 9.6 | 78 |
+| 2048 | 32 × 3 | every block | 19,487 | 16.8 | 76 |
+| both | — | every 2nd block / none | OOM | — | — |
+
+**Decision: train V3 at seq 4096, batch 16 × accum 3.** Seq 2048 saves only ~9%, and 4096
+keeps every step at the length the model is used at. The usage rate shown in Colab is
+**~5.3 units/hour**, not the 6.8 estimate, and the balance after step 0 is **259 units**.
+Step 0 took ~6 min. "Every 2nd block" and "no checkpointing" both ran out of memory even
+on 40 GB.
+
+**Budget at 259 units:** steps 1–3 + 5 ≈ 64, 25 reserve, which leaves ~170 for step 4. That
+covers ~2B tokens at the measured rate (2B ≈ 31 h ≈ 165 units at R=2; less with the R mix).
+
 Total ~220–270 units. Keep a ~25-unit reserve. If step 0's speed or steps 1–3 cost more than
 estimated, cut step 4's token count, not step 5's checks. Download and tokenize datasets on
 Colab into Drive. The local S: drive has only ~29 GB free.
