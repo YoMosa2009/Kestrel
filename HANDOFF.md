@@ -91,7 +91,7 @@ on downloadable preference data (e.g. UltraFeedback) + an SFT data fix.
 With 295 units, **all of steps 0–5 fit now** (~220–270 units at 1.5–2B tokens in step 4), so V3
 can be done in one go without waiting for a refill. Keep a ~25-unit reserve for reruns: if
 step 0's measured speed or steps 1–3 cost more than estimated, trim step 4's token count, not
-steps 5's checks.
+step 5's checks.
 
 ## 7. Open items
 - 50-fact Roost benchmark: 40% recall (gate 60%); one-fact-per-row version not yet run
