@@ -66,8 +66,8 @@ facts into the PKM value slots only.
   needs me (Drive OAuth popup, native browser prompts).
 - Browser automation: the Claude-in-Chrome extension in **Edge on this PC** (device "MALXPC").
   Colab dialogs freeze the extension. Do sign-in popups and native download prompts by hand.
-- Colab: ~6.8 units/A100-hour measured; ~18.5k tok/s training at seq 4096. **59 units left**
-  (as of 2026-10-07); Google AI Pro grants 200/month.
+- Colab: ~6.8 units/A100-hour measured; ~18.5k tok/s training at seq 4096. **295 units left**
+  (as of 2026-10-28); Google AI Pro grants 200/month.
 
 ## 6. The V3 plan (agreed, not started), see docs/11 §0
 Problems seen in V2 chat: refuses "Hi"/"Hello"; echoes questions ("The largest animal in
@@ -85,10 +85,13 @@ on downloadable preference data (e.g. UltraFeedback) + an SFT data fix.
 | 1 | new SFT mix (greetings, small talk, full factual answers, multi-turn recovery, refusals only for harmful, no fake Output comments); tokenize on a CPU runtime; retrain SFT | ~10 |
 | 2 | DPO | ~14 |
 | 3 | MTP head ablation (keep only if it wins) | ~20 |
-| 4 | (after the refill) continued pretraining on 1–1.5B quality tokens from V2, low LR, resumable | ~100–150 |
+| 4 | continued pretraining on 1.5–2B quality tokens from V2, low LR, resumable | ~150–200 |
 | 5 | re-SFT + DPO, Roost self-facts, export gguf, parity, app defaults (R=2, temp ~0.5, top-p 0.9, top-k 30, rep 1.1, memory recall off, neutral system prompt) → **release V3** | ~20 |
 
-Steps 0–3 fit this month (~46 of 59 units). Steps 4–5 come after the next refill.
+With 295 units, **all of steps 0–5 fit now** (~220–270 units at 1.5–2B tokens in step 4), so V3
+can be done in one go without waiting for a refill. Keep a ~25-unit reserve for reruns: if
+step 0's measured speed or steps 1–3 cost more than estimated, trim step 4's token count, not
+steps 5's checks.
 
 ## 7. Open items
 - 50-fact Roost benchmark: 40% recall (gate 60%); one-fact-per-row version not yet run
