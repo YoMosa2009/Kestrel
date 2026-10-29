@@ -1,5 +1,10 @@
 # 11 — Kestrel V3 plan: MTP, then distillation
 
+> **Status (2026-10-28): the plan was revised. Read [Agreed V3 plan](#agreed-v3-plan-2026-10-28) first.**
+> §0 (field observations) still holds. The compute split (3060 + Colab) and the teacher-logit
+> distillation in §2 below are **superseded**. All V3 training runs on Colab A100, and
+> distillation comes from downloadable synthetic datasets, not precomputed teacher logits.
+>
 > **Naming (2026-10-06):** this doc was written as "v2". Release labels are now **V1** (4k + SFT + Kestrel Studio) and **V2** (Roost consolidation fixed), so the plan below is the **V3** plan. "v0.1"/"v0.2" still name the pretraining checkpoints.
 
 *Written 2026-09-16, while v0.2 (Phase D) is still training. This is the plan for
@@ -104,7 +109,30 @@ better fluency, fewer weird outputs, a little more knowledge. Two limits:
 
 **V3 order, revised by the field observations:** (1) SFT mix fix + app defaults, about a
 day, visible immediately; (2) MTP ablation (§1); (3) distillation over +5–10B tokens on the
-3060 (§2); (4) re-SFT, re-run Roost, ship V3.
+3060 (§2); (4) re-SFT, re-run Roost, ship V3. *(Superseded 2026-10-28; see below.)*
+
+## Agreed V3 plan (2026-10-28)
+
+**Compute:** Colab A100 only. Nothing runs on the local PC: no training, evals or inference
+(packaging and app builds are fine). Measured ~6.8 units per A100-hour and ~18.5k tok/s
+training at seq 4096. **295 units** as of 2026-10-28; Google AI Pro adds 200/month.
+
+**Approach:** instead of expensive logit distillation, use **synthetic-data distillation
+through downloadable datasets** (Cosmopedia v2, FineWeb-Edu high-score, Python-Edu, FineMath),
+**DPO** on downloadable preference data (e.g. UltraFeedback), and an SFT data fix.
+
+| step | what | units |
+|---|---|---|
+| 0 | measure A100 speed at seq 2k vs 4k, check balance | ~2 |
+| 1 | new SFT mix (greetings, small talk, full factual answers, multi-turn recovery, refusals only for harmful requests, no fake `Output:` comments); tokenize on a CPU runtime; retrain SFT | ~10 |
+| 2 | DPO | ~14 |
+| 3 | MTP head ablation (§1), kept only if it wins | ~20 |
+| 4 | continued pretraining on 1.5–2B quality tokens from V2, low LR, resumable | ~150–200 |
+| 5 | re-SFT + DPO, Roost self-facts (step 4 changes the memory slots, so they must be re-taught), export gguf, parity, app defaults (R=2, temp ~0.5, top-p 0.9, top-k 30, rep 1.1, memory recall off, neutral system prompt) → **release V3** as one bundle (app + model) | ~20 |
+
+Total ~220–270 units. Keep a ~25-unit reserve. If step 0's speed or steps 1–3 cost more than
+estimated, cut step 4's token count, not step 5's checks. Download and tokenize datasets on
+Colab into Drive. The local S: drive has only ~29 GB free.
 
 ## The thesis
 

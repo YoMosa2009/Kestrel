@@ -64,12 +64,17 @@ facts into the PKM value slots only.
 - **Ship V3 as one release** (app + model bundled, clearly labeled V3).
 - Don't build anything until I say go. Prefer automating; ask me only when it truly
   needs me (Drive OAuth popup, native browser prompts).
-- Browser automation: the Claude-in-Chrome extension in **Edge on this PC** (device "MALXPC").
-  Colab dialogs freeze the extension. Do sign-in popups and native download prompts by hand.
+- Browser automation: use the **built-in browser pane in the Claude desktop app** (tools
+  `mcp__Claude_Browser__*`). Verified 2026-10-28: signed in to Colab on the account above
+  (Pro), and clicks, navigation, screenshots and page JS all work. If Colab shows another
+  language, the URL carried `?hl=<lang>`; open `https://colab.research.google.com/?hl=en` once
+  and it stays English. The fallback is the Claude-in-Chrome extension in Edge (device
+  "MALXPC"), where Colab dialogs freeze the extension. Do sign-in popups and native download
+  prompts by hand.
 - Colab: ~6.8 units/A100-hour measured; ~18.5k tok/s training at seq 4096. **295 units left**
   (as of 2026-10-28); Google AI Pro grants 200/month.
 
-## 6. The V3 plan (agreed, not started), see docs/11 §0
+## 6. The V3 plan (agreed, not started), see docs/11 "Agreed V3 plan" (body of docs/11 §1–2 is superseded)
 Problems seen in V2 chat: refuses "Hi"/"Hello"; echoes questions ("The largest animal in
 the world."); code shape right but fake `# Output:` values and stray imports; repeats a stock
 line; high variance and needs constant sampling tweaks. Cause: SFT mix (refusal slice, no
