@@ -74,7 +74,8 @@ facts into the PKM value slots only.
 - Colab: **~6.7 units/A100-hour** under load (the Resources panel reads lower just after
   connecting). **220 units left** after step 3 (2026-11-02). Google AI Pro
   grants 200/month. Balance: command palette → "View resources". Always "Disconnect and
-  delete runtime" when a job ends. A new runtime asks for Drive access, which I grant by hand; the
+  delete runtime" when a job ends. A new runtime asks for Drive access, which I grant by hand (the browser pane blocks that
+  popup unless I click, so Claude can't accept it even with permission); the
   first `drive.mount` then fails with "mount failed", and a second Run all mounts it with no prompt.
   Finished cell output can sit in a cross-origin frame: scroll and screenshot to read it.
 
@@ -94,7 +95,7 @@ on downloadable preference data (e.g. UltraFeedback) + an SFT data fix.
 | 1 | new SFT mix (greetings, small talk, full factual answers, multi-turn recovery, refusals only for harmful, no fake Output comments); tokenize on a CPU runtime; retrain SFT | ~10 |
 | 2 | DPO: done, made the model worse, not adopted | 7 |
 | 3 | MTP head ablation: done, lost, stays off | 22 |
-| 4 | continued pretraining on ~1.5B quality tokens, low LR, resumable (base checkpoint to be decided: V2 or pre-SFT `runs/ctx4k`) | ~175 |
+| 4 | continued pretraining on ~1.5B quality tokens, low LR, resumable, from `runs/mtp_control`: **running since 2026-11-02** | ~170 |
 | 5 | re-SFT (DPO only if a targeted run earns it), Roost self-facts, export gguf, parity, app defaults (R=2, temp ~0.5, top-p 0.9, top-k 30, rep 1.1, memory recall off, neutral system prompt) → **release V3** | ~20 |
 
 **Steps 0, 1, 2 and 3 are done** (docs/11 has the results). Train at seq 4096, batch 16 × accum 3: ~18k
@@ -104,6 +105,9 @@ only 18%. **Step 2's DPO made it worse** (answers 18 -> 68 words, facts 38%, har
 `runs/dpo_v3` is not used and that recipe must not be reused at step 5. Refusals are still unsolved.
 **Step 3's MTP head lost** (val_mean 1.668 vs 1.635, worse on all 10 domains, 6.1% slower), so `--mtp`
 stays off.
+
+**Step 4 in progress:** `notebooks/kestrel_v3_step4_pretrain.ipynb` trains into Drive `runs/pretrain_v3`.
+If the runtime dies, open that notebook on an A100 and Run all: it resumes from Drive on one LR curve.
 
 With 220 units, step 5 ≈ 6-20 and the reserve is 25, so **step 4 gets ~175 units ≈ 1.5B tokens**. V3 can still be done without waiting for a refill. Keep a ~25-unit reserve for reruns: if
 anything costs more than estimated, trim step 4's token count, not

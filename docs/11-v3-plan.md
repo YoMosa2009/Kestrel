@@ -259,6 +259,24 @@ at 0.033-0.035 at every probe from step 19670 on, and that steadiness is why it 
 it looks like an early one-time cost rather than ongoing harm. A much longer run might recover it.
 Nothing here suggests it would pass the control, and that run is not worth its units.
 
+### Step 4 setup (2026-11-02): running
+
+`scripts/prepare_quality.py`, `scripts/test_step4.py`, `notebooks/kestrel_v3_step4_pretrain.ipynb`.
+
+**Corpus:** 1.371B new tokens on Drive `datasets/quality_v3`, built on a CPU runtime in about 2 hours.
+Cosmopedia 600M, FineWeb score 4+ 420M, FineMath 220M, Python-Edu 130M. Each comes from the second half
+of its source's files, which data_5b never reached, so this is unseen text. Python-Edu's rows only name
+files; the text comes from Software Heritage's public bucket, with no credentials needed.
+
+**Run:** from `runs/mtp_control` (step 19940, 3.265B tokens), 7,600 steps = 1.49B tokens into
+`runs/pretrain_v3`, muon LR 0.005, adamw LR 0.00075, warmup 30, decay over the last 30%. Mix:
+qknow 33, qweb 23, qmath 12, qcode 7, code 8, inst 6, cli 3, repo 3, tool 3, docs 1, sec 1. New trainer
+flags: `--mix` (one fixed mixture) and `--schedule-start` (one LR curve across resumes; before this, a
+resume re-warmed and stretched a new curve over what was left).
+
+**Verdict inputs:** `eval_generalization` on data_5b alone, against the control's val_mean of 1.6345.
+The new domains' `val_q*` shards are only in the training probes, so that suite stays comparable.
+
 **Budget at 220 units:** step 5 ≈ 6-20, 25 reserve, which leaves ~175 for step 4. These runs averaged
 16.3k tok/s with evals and Drive saves included, against 18k with no pauses, so a real run costs 104-115
 units per 1B tokens. Plan **~1.5B tokens**.
