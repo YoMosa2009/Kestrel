@@ -71,10 +71,12 @@ facts into the PKM value slots only.
   and it stays English. The fallback is the Claude-in-Chrome extension in Edge (device
   "MALXPC"), where Colab dialogs freeze the extension. Do sign-in popups and native download
   prompts by hand.
-- Colab: **~5.3 units/A100-hour** (Resources panel, 2026-10-28; V1-era estimate was 6.8).
-  **259 units left** after step 0 (2026-10-28; the earlier "295" was wrong). Google AI Pro
+- Colab: **~6.7 units/A100-hour** under load (the Resources panel reads lower just after
+  connecting). **249 units left** after step 1 (2026-11-01). Google AI Pro
   grants 200/month. Balance: command palette → "View resources". Always "Disconnect and
-  delete runtime" when a job ends.
+  delete runtime" when a job ends. A new runtime asks for Drive access, which I grant by hand; the
+  first `drive.mount` then fails with "mount failed", and a second Run all mounts it with no prompt.
+  Finished cell output can sit in a cross-origin frame: scroll and screenshot to read it.
 
 ## 6. The V3 plan (agreed, not started), see docs/11 "Agreed V3 plan" (body of docs/11 §1–2 is superseded)
 Problems seen in V2 chat: refuses "Hi"/"Hello"; echoes questions ("The largest animal in
@@ -95,12 +97,14 @@ on downloadable preference data (e.g. UltraFeedback) + an SFT data fix.
 | 4 | continued pretraining on 1.5–2B quality tokens from V2, low LR, resumable | ~150–200 |
 | 5 | re-SFT + DPO, Roost self-facts, export gguf, parity, app defaults (R=2, temp ~0.5, top-p 0.9, top-k 30, rep 1.1, memory recall off, neutral system prompt) → **release V3** | ~20 |
 
-**Step 0 is done** (see docs/11 "Step 0 results"): seq 4096 at batch 16 × accum 3 runs at
-17.9k tok/s (bench, all R=2), and seq 2048 is only ~9% faster. Use seq 4096. That is ~82 units
-per 1B tokens at 5.3 units/hour. Next is step 1.
+**Steps 0 and 1 are done** (docs/11 "Step 0 results", "Step 1 results"). Train at seq 4096, batch 16
+× accum 3: ~18k tok/s, ~104 units per 1B tokens. Step 1's model (Drive `runs/sft_v3/ckpt.pt`) no
+longer refuses greetings or repeats stock lines, and fake output comments are gone. Facts are still
+often wrong, and harmful prompts are mostly answered (13% refused), so the refusal slice needs work
+at step 5 or via DPO. **Next is step 2.**
 
-With 259 units, **steps 1–5 still fit** (~220–270 units at 1.5–2B tokens in step 4), so V3
-can be done in one go without waiting for a refill. Keep a ~25-unit reserve for reruns: if
+With 249 units, steps 2, 3 and 5 ≈ 54 and the reserve is 25, so **step 4 gets ~170 units ≈ 1.6B
+tokens**. V3 can still be done without waiting for a refill. Keep a ~25-unit reserve for reruns: if
 step 0's measured speed or steps 1–3 cost more than estimated, trim step 4's token count, not
 step 5's checks.
 

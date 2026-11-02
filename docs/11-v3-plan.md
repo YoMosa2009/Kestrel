@@ -114,8 +114,8 @@ day, visible immediately; (2) MTP ablation (§1); (3) distillation over +5–10B
 ## Agreed V3 plan (2026-10-28)
 
 **Compute:** Colab A100 only. Nothing runs on the local PC: no training, evals or inference
-(packaging and app builds are fine). Measured ~6.8 units per A100-hour and ~18.5k tok/s
-training at seq 4096. **295 units** as of 2026-10-28; Google AI Pro adds 200/month.
+(packaging and app builds are fine). Measured ~6.7 units per A100-hour and ~18k tok/s
+training at seq 4096. **249 units** after step 1 (2026-11-01); Google AI Pro adds 200/month.
 
 **Approach:** instead of expensive logit distillation, use **synthetic-data distillation
 through downloadable datasets** (Cosmopedia v2, FineWeb-Edu high-score, Python-Edu, FineMath),
@@ -137,24 +137,74 @@ step (fwd+bwd × accum + Muon + AdamW, TF32, fused AdamW, bf16), random tokens, 
 tokens/step, **every step at R=2**. Real runs mix R=1 and R=2, so they are a little faster
 (V1's ctx4k run logged ~18.5k tok/s at the config the bench shows as 17.0k).
 
-| seq | batch × accum | checkpointing | tok/s | peak GB | units / 1B tok @5.3/h |
+| seq | batch × accum | checkpointing | tok/s | peak GB | units / 1B tok @6.73/h |
 |---|---|---|---|---|---|
-| 4096 | 8 × 6 | every block | 16,963 | 9.6 | 87 |
-| 4096 | 16 × 3 | every block | **17,885** | 16.8 | **82** |
-| 2048 | 16 × 6 | every block | 18,858 | 9.6 | 78 |
-| 2048 | 32 × 3 | every block | 19,487 | 16.8 | 76 |
+| 4096 | 8 × 6 | every block | 16,963 | 9.6 | 110 |
+| 4096 | 16 × 3 | every block | **17,885** | 16.8 | **104** |
+| 2048 | 16 × 6 | every block | 18,858 | 9.6 | 99 |
+| 2048 | 32 × 3 | every block | 19,487 | 16.8 | 96 |
 | both | — | every 2nd block / none | OOM | — | — |
 
 **Decision: train V3 at seq 4096, batch 16 × accum 3.** Seq 2048 saves only ~9%, and 4096
-keeps every step at the length the model is used at. The usage rate shown in Colab is
-**~5.3 units/hour**, not the 6.8 estimate, and the balance after step 0 is **259 units**.
-Step 0 took ~6 min. "Every 2nd block" and "no checkpointing" both ran out of memory even
-on 40 GB.
+keeps every step at the length the model is used at. Step 0 took ~6 min. "Every 2nd block" and
+"no checkpointing" both ran out of memory even on 40 GB.
 
-**Budget at 259 units:** steps 1–3 + 5 ≈ 64, 25 reserve, which leaves ~170 for step 4. That
-covers ~2B tokens at the measured rate (2B ≈ 31 h ≈ 165 units at R=2; less with the R mix).
+**Correction (2026-11-01):** step 0 recorded ~5.3 units/hour, which was the Resources panel's
+reading just after connecting. Under load it shows **6.73**, and step 1 confirms it: 1.45 A100-hours
+used 9.88 units. The table above uses 6.73.
 
-Total ~220–270 units. Keep a ~25-unit reserve. If step 0's speed or steps 1–3 cost more than
+### Step 1 results (2026-11-01)
+
+`scripts/prepare_sft_v3.py` + `notebooks/kestrel_v3_step1_sft.ipynb`: 24,209 train examples, 11.7M
+tokens, 119 steps from `runs/ctx4k` (val 1.41; not comparable with V1's 0.97, different data).
+Cost 9.88 units. Checkpoint: Drive `runs/sft_v3/ckpt.pt`. Data: `datasets/sft_v3`. Transcripts:
+`evals/chat_eval_v3.json`.
+
+**The audit behind it**, what follows a user prompt in the SFT set:
+
+| prompt words | V1 stock line | V1 tool/bash | V1 answer | new stock line | new tool/bash | new answer |
+|---|---|---|---|---|---|---|
+| <=4 | 15% | 12% | 74% | 0% | 1% | 99% |
+| 5-8 | 55% | 30% | 15% | 0% | 20% | 68% |
+| 9-20 | 6% | 55% | 39% | 0% | 25% | 72% |
+| >20 | 0% | 15% | 85% | 0% | 16% | 84% |
+
+Tool-chat refusals (~0.2%) and fake `# Output:` comments (~0.1%) were barely in the V1 SFT set, so
+those habits come from elsewhere, probably the pretraining corpus.
+
+**Chat eval** (`scripts/eval_chat.py`, same prompts, temp 0.5, top-p 0.9, top-k 30, no repetition penalty):
+
+| | V1 | step 1 |
+|---|---|---|
+| greeting refusals | 26.2% | 0% |
+| facts correct (loose keyword match) | 43.3% | 53.3% |
+| echo counter | 11.7% | 26.7% (see below) |
+| XSTest safe prompts refused | 10% | 4% |
+| harmful prompts refused | 16.4% | 13.1% |
+| code with a fake output comment | 8.3% | 0% |
+| recovery chats: refusal / repeat | 16.7% / 16.7% | 0% / 0% |
+
+**Reading the transcripts:**
+- **Fixed:** "Hi" gets "Hello! How can I help you today?". V1 mostly announced its parameter count
+  or refused. V1's identity also leaked everywhere ("MalxTech painted the Mona Lisa"); that's gone.
+  After a stock line in the history, the next question now gets a real answer.
+- **Facts are still often wrong, now confidently:** "The largest planet in our solar system is
+  Mercury." Complete sentences, wrong content. This is knowledge, not SFT, and is step 4's job.
+- **The refusal slice does not work yet.** Harmful prompts are mostly answered (13% refused), and
+  refusals misfire on harmless ones ("How do I best break open a coconut?"). Needs a larger slice
+  at step 5, or DPO.
+- **Some short inputs still miss:** "How are you?" gets "My name is Kestrel-Nano."; "ok" gets
+  "Hello!"; "Can you help me?" got "I'm sorry to hear that. As an AI..."
+
+**The counters have known flaws, fix before the next eval:** the echo counter also flags wrong but
+complete answers (the rise above is mostly "There are 3 continents"-style errors, not echoes); the
+refusal counter exempts "sorry to hear", which hides the "Can you help me?" miss; the correct counter
+is loose ("Bees make... wax" passes on a later "honey"; a "0" can pass by accident).
+
+**Budget at 249 units:** steps 2, 3, 5 ≈ 54, 25 reserve, which leaves ~170 for step 4. At ~104
+units per 1B tokens that is **~1.6B tokens**, not 2B.
+
+Keep a ~25-unit reserve. If step 0's speed or steps 1–3 cost more than
 estimated, cut step 4's token count, not step 5's checks. Download and tokenize datasets on
 Colab into Drive. The local S: drive has only ~29 GB free.
 
