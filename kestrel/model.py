@@ -415,12 +415,20 @@ class KestrelModel(nn.Module):
         # path's 1.5 GB logits spike OOM'd the 8 GB card during eval probes.
         # When targets are given the logits aren't returned (all loss callers
         # ignore them); inference (no targets) still gets full logits below.
-        chunked = (targets is not None
-                   and self.cfg.loss_chunks > 1 and not self.cfg.mtp)
+        chunked = targets is not None and self.cfg.loss_chunks > 1
+        # MTP is a training aid only, so every eval (val loss, loop gain, evals, Roost's
+        # gate) stays comparable with a model that never had the head. targets[t] is
+        # already the next token, so position t's "token after that" is targets[t + 1].
+        mtp = self.cfg.mtp and self.training and targets is not None and targets.size(1) > 1
         if chunked:
             loss = chunked_cross_entropy(
                 x, self.embed.weight, targets, self.cfg.z_loss, self.cfg.loss_chunks,
                 loss_mask)
+            if mtp:
+                loss = loss + self.cfg.mtp_weight * chunked_cross_entropy(
+                    self.mtp_norm(self.mtp_proj(x[:, :-1])), self.embed.weight, targets[:, 1:],
+                    0.0, self.cfg.loss_chunks,
+                    loss_mask[:, 1:] if loss_mask is not None else None)
             if return_state:
                 return None, loss, carry
             return None, loss
@@ -443,12 +451,17 @@ class KestrelModel(nn.Module):
                 if self.cfg.z_loss > 0:
                     loss = loss + self.cfg.z_loss * (
                         logits.logsumexp(-1).reshape(-1).pow(2) * m).sum() / d
-            if self.cfg.mtp and targets.size(1) > 2:
-                h2 = self.mtp_norm(self.mtp_proj(x[:, :-2]))
+            if mtp:
+                h2 = self.mtp_norm(self.mtp_proj(x[:, :-1]))
                 logits2 = h2 @ self.embed.weight.t()
-                loss = loss + self.cfg.mtp_weight * F.cross_entropy(
-                    logits2.reshape(-1, logits2.size(-1)),
-                    targets[:, 2:].reshape(-1))
+                per2 = F.cross_entropy(logits2.reshape(-1, logits2.size(-1)),
+                                       targets[:, 1:].reshape(-1), reduction="none")
+                if loss_mask is None:
+                    aux = per2.mean()
+                else:
+                    m2 = loss_mask[:, 1:].reshape(-1).to(per2.dtype)
+                    aux = (per2 * m2).sum() / m2.sum().clamp(min=1.0)
+                loss = loss + self.cfg.mtp_weight * aux
 
         if return_state:
             return logits, loss, carry

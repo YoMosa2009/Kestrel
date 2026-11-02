@@ -227,6 +227,13 @@ def main():
     ap.add_argument("--rope-scale", type=float, default=None,
                     help="position-interpolation factor, e.g. 4 to extend a 1024-token "
                          "model to 4096 (default: from checkpoint, else 1.0)")
+    ap.add_argument("--mtp", action="store_true",
+                    help="train with the multi-token-prediction head (docs/11 §1)")
+    ap.add_argument("--mtp-weight", type=float, default=None)
+    ap.add_argument("--init-from", default=None,
+                    help="start a NEW run from this checkpoint's weights with fresh "
+                         "optimizers. For matched ablations: both arms get identical "
+                         "optimizer state, and the R stream restarts from the same seed")
     ap.add_argument("--seed", type=int, default=1337)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = ap.parse_args()
@@ -276,6 +283,10 @@ def main():
           f"(trained context ~{int(1024 * cfg.rope_scale)} tokens)")
     if args.grad_checkpoint:
         cfg.grad_checkpoint = True
+    if args.mtp:
+        cfg.mtp = True
+    if args.mtp_weight is not None:
+        cfg.mtp_weight = args.mtp_weight
     if args.loss_chunks >= 0:
         cfg.loss_chunks = args.loss_chunks
     model = KestrelModel(cfg).to(device)
@@ -329,6 +340,16 @@ def main():
     if os.path.exists(ckpt_path):
         step, tokens_seen = load_ckpt(ckpt_path, model, muon, adamw, train_loader, device)
         print(f"resumed from {ckpt_path} at step {step} ({tokens_seen/1e9:.3f}B tokens)")
+    elif args.init_from:
+        ck = torch.load(args.init_from, map_location=device, weights_only=False)
+        missing, unexpected = _core(model).load_state_dict(ck["model"], strict=False)
+        bad = [k for k in missing if not k.startswith("mtp_")] + list(unexpected)
+        if bad:
+            raise SystemExit(f"--init-from: state dict mismatch: {bad[:8]}")
+        step, tokens_seen = ck.get("step", 0), ck.get("tokens_seen", 0)
+        torch.manual_seed(args.seed + 1)    # the head's init must not shift the R stream
+        print(f"initialized from {args.init_from} at step {step} "
+              f"({tokens_seen/1e9:.3f}B tokens), fresh optimizers | new head: {list(missing)}")
     # Every schedule below is measured from here, so a resumed run re-warms its LR
     # and runs its own full WSD shape between start_step and args.steps.
     if args.prefetch and train_loader is not None:
