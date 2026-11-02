@@ -187,6 +187,7 @@ def main():
     total = sum(p["tokens"] for p in prog.values())
     json.dump(dict(tokens_total=total, sources=prog), open(os.path.join(home, "manifest.json"), "w"), indent=1)
     print(f"QUALITY_DONE {total / 1e9:.3f}B tokens", flush=True)
+    os._exit(0)     # streams abandoned at a source's budget can hang a normal interpreter exit
 
 
 if __name__ == "__main__":
