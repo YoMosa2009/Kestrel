@@ -72,7 +72,7 @@ facts into the PKM value slots only.
   "MALXPC"), where Colab dialogs freeze the extension. Do sign-in popups and native download
   prompts by hand.
 - Colab: **~6.7 units/A100-hour** under load (the Resources panel reads lower just after
-  connecting). **242 units left** after step 2 (2026-11-01). Google AI Pro
+  connecting). **220 units left** after step 3 (2026-11-02). Google AI Pro
   grants 200/month. Balance: command palette → "View resources". Always "Disconnect and
   delete runtime" when a job ends. A new runtime asks for Drive access, which I grant by hand; the
   first `drive.mount` then fails with "mount failed", and a second Run all mounts it with no prompt.
@@ -93,19 +93,20 @@ on downloadable preference data (e.g. UltraFeedback) + an SFT data fix.
 | 0 | measure A100 speed at seq 2k vs 4k, check balance | ~2 |
 | 1 | new SFT mix (greetings, small talk, full factual answers, multi-turn recovery, refusals only for harmful, no fake Output comments); tokenize on a CPU runtime; retrain SFT | ~10 |
 | 2 | DPO: done, made the model worse, not adopted | 7 |
-| 3 | MTP head ablation (keep only if it wins) | ~20 |
-| 4 | continued pretraining on ~1.7B quality tokens from V2, low LR, resumable | ~180 |
+| 3 | MTP head ablation: done, lost, stays off | 22 |
+| 4 | continued pretraining on ~1.5B quality tokens, low LR, resumable (base checkpoint to be decided: V2 or pre-SFT `runs/ctx4k`) | ~175 |
 | 5 | re-SFT (DPO only if a targeted run earns it), Roost self-facts, export gguf, parity, app defaults (R=2, temp ~0.5, top-p 0.9, top-k 30, rep 1.1, memory recall off, neutral system prompt) → **release V3** | ~20 |
 
-**Steps 0, 1 and 2 are done** (docs/11 has the results). Train at seq 4096, batch 16 × accum 3: ~18k
-tok/s, ~104 units per 1B tokens. **Best model so far is step 1's (Drive `runs/sft_v3/ckpt.pt`):** no
+**Steps 0, 1, 2 and 3 are done** (docs/11 has the results). Train at seq 4096, batch 16 × accum 3: ~18k
+tok/s without pauses, 16.3k with evals and Drive saves, so 104-115 units per 1B tokens. **Best model so far is step 1's (Drive `runs/sft_v3/ckpt.pt`):** no
 stock-line repeats, no fake output comments, facts correct 48% (V1 25%), harmful prompts refused
 only 18%. **Step 2's DPO made it worse** (answers 18 -> 68 words, facts 38%, harmful refused 3%), so
 `runs/dpo_v3` is not used and that recipe must not be reused at step 5. Refusals are still unsolved.
+**Step 3's MTP head lost** (val_mean 1.668 vs 1.635, worse on all 10 domains, 6.1% slower), so `--mtp`
+stays off.
 
-With 242 units, step 3 ≈ 20, step 5 ≈ 6-20 and the reserve is 25, so **step 4 gets ~180 units ≈ 1.7B
-tokens**. V3 can still be done without waiting for a refill. Keep a ~25-unit reserve for reruns: if
-step 0's measured speed or steps 1–3 cost more than estimated, trim step 4's token count, not
+With 220 units, step 5 ≈ 6-20 and the reserve is 25, so **step 4 gets ~175 units ≈ 1.5B tokens**. V3 can still be done without waiting for a refill. Keep a ~25-unit reserve for reruns: if
+anything costs more than estimated, trim step 4's token count, not
 step 5's checks.
 
 ## 7. Open items

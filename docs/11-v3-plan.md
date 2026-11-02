@@ -115,7 +115,7 @@ day, visible immediately; (2) MTP ablation (§1); (3) distillation over +5–10B
 
 **Compute:** Colab A100 only. Nothing runs on the local PC: no training, evals or inference
 (packaging and app builds are fine). Measured ~6.7 units per A100-hour and ~18k tok/s
-training at seq 4096. **242 units** after step 2 (2026-11-01); Google AI Pro adds 200/month.
+training at seq 4096. **220 units** after step 3 (2026-11-02); Google AI Pro adds 200/month.
 
 **Approach:** instead of expensive logit distillation, use **synthetic-data distillation
 through downloadable datasets** (Cosmopedia v2, FineWeb-Edu high-score, Python-Edu, FineMath),
@@ -125,9 +125,9 @@ through downloadable datasets** (Cosmopedia v2, FineWeb-Edu high-score, Python-E
 |---|---|---|
 | 0 | measure A100 speed at seq 2k vs 4k, check balance | ~2 |
 | 1 | new SFT mix (greetings, small talk, full factual answers, multi-turn recovery, refusals only for harmful requests, no fake `Output:` comments); tokenize on a CPU runtime; retrain SFT | ~10 |
-| 2 | DPO | ~14 |
-| 3 | MTP head ablation (§1), kept only if it wins | ~20 |
-| 4 | continued pretraining on 1.5–2B quality tokens from V2, low LR, resumable | ~150–200 |
+| 2 | DPO: done, made the model worse, not adopted | 7 |
+| 3 | MTP head ablation (§1): done, lost, stays off | 22 |
+| 4 | continued pretraining on ~1.5B quality tokens, low LR, resumable | ~175 |
 | 5 | re-SFT + DPO, Roost self-facts (step 4 changes the memory slots, so they must be re-taught), export gguf, parity, app defaults (R=2, temp ~0.5, top-p 0.9, top-k 30, rep 1.1, memory recall off, neutral system prompt) → **release V3** as one bundle (app + model) | ~20 |
 
 ### Step 0 results (2026-10-28)
@@ -235,8 +235,33 @@ to invent things. Summing log-probs over the answer also makes the loss scale wi
 **Decision:** step 1's model (`runs/sft_v3`) stays the best so far. Do not use this DPO recipe at
 step 5. A targeted run without UltraFeedback is untested.
 
-**Budget at 242 units:** step 3 ≈ 20, step 5 ≈ 6-20, 25 reserve, which leaves ~180 for step 4. At
-~104 units per 1B tokens that is **~1.7B tokens**.
+### Step 3 results (2026-11-02): MTP lost, stays off
+
+`scripts/test_mtp.py`, `notebooks/kestrel_v3_step3_mtp.ipynb`. First fixed the head: it was scoring
+three tokens ahead instead of two, and its loss leaked into eval. Two arms from `runs/ctx4k` (pre-SFT,
+step 19590), same data, schedule and fresh optimizers, 350 steps = 69M tokens each, at step 4's planned
+LR. Cost ~22 units. Output on Drive: `runs/mtp_control`, `runs/mtp_mtp`, `evals/mtp_generalization.json`.
+
+| | control | MTP |
+|---|---|---|
+| **val_mean** | **1.6345** | 1.6677 (+2.0%) |
+| domains with the lower val loss | **10 of 10** | 0 of 10 |
+| distinct 4-grams | 85.1% | 78.7% |
+| two-hop / arithmetic | 30% / 0% | 30% / 0% |
+| training speed | 16,314 tok/s | 15,324 tok/s (-6.1%) |
+
+**Decision: MTP stays off.** It failed the pre-registered rule at equal tokens, and counting its 6.1%
+extra time only widens the gap. The difference is well above the noise for this comparison: both arms
+see the same val batches at each probe, and the gap held at 0.034 at every probe from step 19670 on,
+while val_mean itself moved about 0.05 between probes.
+
+**What this does not show:** the gap opened in the first 80 steps and then neither grew nor closed, so
+it looks like an early one-time cost rather than ongoing harm. A much longer run might recover it.
+Nothing here suggests it would pass the control, and that run is not worth its units.
+
+**Budget at 220 units:** step 5 ≈ 6-20, 25 reserve, which leaves ~175 for step 4. These runs averaged
+16.3k tok/s with evals and Drive saves included, against 18k with no pauses, so a real run costs 104-115
+units per 1B tokens. Plan **~1.5B tokens**.
 
 Keep a ~25-unit reserve. If step 0's speed or steps 1–3 cost more than
 estimated, cut step 4's token count, not step 5's checks. Download and tokenize datasets on
