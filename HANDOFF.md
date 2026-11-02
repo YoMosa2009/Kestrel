@@ -94,7 +94,7 @@ on downloadable preference data (e.g. UltraFeedback) + an SFT data fix.
 | 1 | new SFT mix (greetings, small talk, full factual answers, multi-turn recovery, refusals only for harmful, no fake Output comments); tokenize on a CPU runtime; retrain SFT | ~10 |
 | 2 | DPO | ~14 |
 | 3 | MTP head ablation (keep only if it wins) | ~20 |
-| 4 | continued pretraining on 1.5–2B quality tokens from V2, low LR, resumable | ~150–200 |
+| 4 | continued pretraining on ~1.6B quality tokens from V2, low LR, resumable | ~170 |
 | 5 | re-SFT + DPO, Roost self-facts, export gguf, parity, app defaults (R=2, temp ~0.5, top-p 0.9, top-k 30, rep 1.1, memory recall off, neutral system prompt) → **release V3** | ~20 |
 
 **Steps 0 and 1 are done** (docs/11 "Step 0 results", "Step 1 results"). Train at seq 4096, batch 16
