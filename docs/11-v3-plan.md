@@ -251,9 +251,9 @@ LR. Cost ~22 units. Output on Drive: `runs/mtp_control`, `runs/mtp_mtp`, `evals/
 | training speed | 16,314 tok/s | 15,324 tok/s (-6.1%) |
 
 **Decision: MTP stays off.** It failed the pre-registered rule at equal tokens, and counting its 6.1%
-extra time only widens the gap. The difference is well above the noise for this comparison: both arms
-see the same val batches at each probe, and the gap held at 0.034 at every probe from step 19670 on,
-while val_mean itself moved about 0.05 between probes.
+extra time only widens the gap. The probes are paired, because both arms see the same val batches at
+each one. So although val_mean itself ranged over 0.043 from batch noise, the gap between the arms held
+at 0.033-0.035 at every probe from step 19670 on, and that steadiness is why it reads as real.
 
 **What this does not show:** the gap opened in the first 80 steps and then neither grew nor closed, so
 it looks like an early one-time cost rather than ongoing harm. A much longer run might recover it.
