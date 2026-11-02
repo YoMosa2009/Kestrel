@@ -115,7 +115,7 @@ day, visible immediately; (2) MTP ablation (§1); (3) distillation over +5–10B
 
 **Compute:** Colab A100 only. Nothing runs on the local PC: no training, evals or inference
 (packaging and app builds are fine). Measured ~6.7 units per A100-hour and ~18k tok/s
-training at seq 4096. **249 units** after step 1 (2026-11-01); Google AI Pro adds 200/month.
+training at seq 4096. **242 units** after step 2 (2026-11-01); Google AI Pro adds 200/month.
 
 **Approach:** instead of expensive logit distillation, use **synthetic-data distillation
 through downloadable datasets** (Cosmopedia v2, FineWeb-Edu high-score, Python-Edu, FineMath),
@@ -196,13 +196,47 @@ those habits come from elsewhere, probably the pretraining corpus.
 - **Some short inputs still miss:** "How are you?" gets "My name is Kestrel-Nano."; "ok" gets
   "Hello!"; "Can you help me?" got "I'm sorry to hear that. As an AI..."
 
-**The counters have known flaws, fix before the next eval:** the echo counter also flags wrong but
+**These counters had flaws, since fixed (see Step 2 results for the recount):** the echo counter also flags wrong but
 complete answers (the rise above is mostly "There are 3 continents"-style errors, not echoes); the
 refusal counter exempts "sorry to hear", which hides the "Can you help me?" miss; the correct counter
 is loose ("Bees make... wax" passes on a later "honey"; a "0" can pass by accident).
 
-**Budget at 249 units:** steps 2, 3, 5 ≈ 54, 25 reserve, which leaves ~170 for step 4. At ~104
-units per 1B tokens that is **~1.6B tokens**, not 2B.
+### Step 2 results (2026-11-01): DPO made the model worse, not adopted
+
+`scripts/prepare_dpo.py`, `scripts/train_dpo.py`, `notebooks/kestrel_v3_step2_dpo.ipynb`. 28,924 pairs
+(UltraFeedback 22,000, harmful 1,333, ordinary questions 3,000, greetings 700, contrast 300,
+TruthfulQA 1,591). From `runs/sft_v3`, beta 0.1, 885 steps of 32 pairs, muon LR 0.001, adamw LR
+0.00015, R=2. Cost ~7 units. DPO loss 0.693 -> 0.369; SFT val 1.3996 -> 1.4560 (+4.03%). Output on
+Drive: `runs/dpo_v3` (not used).
+
+**Chat eval, all three recounted with the fixed counters** (these replace the step 1 table's
+figures, which came from looser counters):
+
+| | V1 | step 1 | step 2 (DPO) |
+|---|---|---|---|
+| greeting refusals | 28.6% | 7.1% | 7.1% |
+| facts correct | 25.0% | **48.3%** | 38.3% |
+| echoes | 1.7% | 8.3% | 0% |
+| XSTest safe prompts refused | 12.0% | 10.0% | 4.0% |
+| harmful prompts refused | 21.3% | 18.0% | **3.3%** |
+| code with a fake output comment | 8.3% | 0% | 0% |
+| recovery chats: refusal / repeat | 16.7% / 16.7% | 0% / 0% | 0% / 0% |
+| mean words: greeting / fact / code | 19 / 31 / 33 | 11 / 18 / 34 | 26 / 68 / 55 |
+
+**Reading the transcripts:** the model now rambles. "The capital of France is Paris, and it is the
+largest city in the world...". Short clean answers are gone, "As an AI" returned, some greetings
+are garbled, and harmful prompts get long compliant answers. The lower echo count is only because
+everything got longer.
+
+**Likely cause, not proven:** UltraFeedback's preferred answers are systematically longer, and at 76%
+of the pairs that dominates, so DPO learned "longer is better". At 157M, longer means more chances
+to invent things. Summing log-probs over the answer also makes the loss scale with length.
+
+**Decision:** step 1's model (`runs/sft_v3`) stays the best so far. Do not use this DPO recipe at
+step 5. A targeted run without UltraFeedback is untested.
+
+**Budget at 242 units:** step 3 ≈ 20, step 5 ≈ 6-20, 25 reserve, which leaves ~180 for step 4. At
+~104 units per 1B tokens that is **~1.7B tokens**.
 
 Keep a ~25-unit reserve. If step 0's speed or steps 1–3 cost more than
 estimated, cut step 4's token count, not step 5's checks. Download and tokenize datasets on
