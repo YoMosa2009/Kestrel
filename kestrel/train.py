@@ -29,8 +29,8 @@ import torch
 from kestrel.config import PRESETS, KestrelConfig
 from kestrel.model import KestrelModel
 from kestrel.optim import build_optimizers
-from kestrel.data import (make_loaders, CurriculumLoader, make_domain_val_loaders,
-                          PrefetchLoader, SFTLoader)
+from kestrel.data import (make_loaders, CurriculumLoader, discover_domains,
+                          make_domain_val_loaders, PrefetchLoader, SFTLoader)
 
 
 # ----------------------------------------------------------------- schedule
@@ -52,6 +52,11 @@ def wsd_lr_mult(step: int, total: int, warmup: int, decay_frac: float,
         return 1.0
     p = (step - decay_start) / max(1, total - decay_start)
     return floor + (1.0 - floor) * (1.0 - math.sqrt(min(1.0, p)))
+
+
+def parse_mix(text: str) -> dict:
+    """'know=30,code=8' -> per-domain sampling weights for --mix."""
+    return {t.strip(): float(w) for t, w in (kv.split("=") for kv in text.split(","))}
 
 
 # ----------------------------------------------------------------- run control
@@ -187,6 +192,9 @@ def main():
     ap.add_argument("--curriculum", action="store_true",
                     help="stage the per-domain mixture over training + premium anneal "
                          "(needs per-domain shards from prepare_data_v2)")
+    ap.add_argument("--mix", default=None,
+                    help="with --curriculum: one fixed mixture instead of the stages, e.g. "
+                         "'know=30,code=8'. Every tag must have shards in --data-dir")
     ap.add_argument("--synthetic", action="store_true",
                     help="overfit one fixed random batch (trainer shakedown, no data)")
     ap.add_argument("--out", default="experiments/run")
@@ -234,6 +242,10 @@ def main():
                     help="start a NEW run from this checkpoint's weights with fresh "
                          "optimizers. For matched ablations: both arms get identical "
                          "optimizer state, and the R stream restarts from the same seed")
+    ap.add_argument("--schedule-start", type=int, default=None,
+                    help="absolute step the LR schedule is measured from. Set it on a run that "
+                         "may be interrupted, so a resume continues one WSD curve instead of "
+                         "re-warming and stretching a new one over what is left")
     ap.add_argument("--seed", type=int, default=1337)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = ap.parse_args()
@@ -320,8 +332,15 @@ def main():
     else:
         assert args.data_dir, "--data-dir required unless --synthetic"
         if args.curriculum:
+            stages = None
+            if args.mix:
+                mix = parse_mix(args.mix)
+                missing = sorted(set(mix) - set(discover_domains(args.data_dir)))
+                if missing:
+                    raise SystemExit(f"--mix: no shards in {args.data_dir} for {missing}")
+                stages = [(1.01, mix)]
             train_loader = CurriculumLoader(args.data_dir, args.seq, args.batch,
-                                            device, args.seed)
+                                            device, args.seed, stages=stages)
             dom_val = make_domain_val_loaders(args.data_dir, args.seq, args.batch, device)
             val_loader = None
             print(f"curriculum: {len(train_loader.loaders)} domains "
@@ -350,8 +369,8 @@ def main():
         torch.manual_seed(args.seed + 1)    # the head's init must not shift the R stream
         print(f"initialized from {args.init_from} at step {step} "
               f"({tokens_seen/1e9:.3f}B tokens), fresh optimizers | new head: {list(missing)}")
-    # Every schedule below is measured from here, so a resumed run re-warms its LR
-    # and runs its own full WSD shape between start_step and args.steps.
+    # Every schedule below is measured from here (or from --schedule-start), so without
+    # that flag a resumed run re-warms its LR and runs its own WSD shape to args.steps.
     if args.prefetch and train_loader is not None:
         train_loader = PrefetchLoader(train_loader, depth=args.prefetch)
         print(f"prefetch: background reader, depth {args.prefetch}")
@@ -362,6 +381,9 @@ def main():
         raise SystemExit(f"--steps {args.steps} is at or below the resumed step "
                          f"{start_step}; --steps is CUMULATIVE, so pass "
                          f"{start_step} + (new steps you want).")
+
+    sched_start = start_step if args.schedule_start is None else args.schedule_start
+    sched_total = max(1, args.steps - sched_start)
 
     def set_lr(mult):
         for opt, base in ((muon, args.muon_lr), (adamw, args.adamw_lr)):
@@ -431,12 +453,12 @@ def main():
             t_start += time.time() - t_pause  # a pause must not skew the ETA
             print(f"  [control] resumed after {time.time()-t_pause:.0f}s", flush=True)
 
-        rel = step - start_step
-        mult = wsd_lr_mult(rel, run_steps, args.warmup, args.decay_frac)
+        rel = step - sched_start
+        mult = wsd_lr_mult(rel, sched_total, args.warmup, args.decay_frac)
         set_lr(mult)
         if args.curriculum and not args.synthetic:
             c0 = args.curriculum_start
-            train_loader.set_progress(c0 + (rel / run_steps) * (1.0 - c0))
+            train_loader.set_progress(c0 + (rel / sched_total) * (1.0 - c0))
 
         muon.zero_grad(set_to_none=True)
         adamw.zero_grad(set_to_none=True)
