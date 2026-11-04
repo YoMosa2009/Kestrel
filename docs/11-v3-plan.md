@@ -259,7 +259,33 @@ at 0.033-0.035 at every probe from step 19670 on, and that steadiness is why it 
 it looks like an early one-time cost rather than ongoing harm. A much longer run might recover it.
 Nothing here suggests it would pass the control, and that run is not worth its units.
 
-### Step 4 setup (2026-11-02): running
+### Step 4 results (2026-11-04): better than the control on every measure
+
+`runs/pretrain_v3/ckpt.pt` (step 27540, 4.759B tokens seen), `evals/step4_generalization.json`.
+
+| | step 3 control | step 4 |
+|---|---|---|
+| **val_mean** (data_5b suite) | 1.6345 | **1.5976 (-2.3%)** |
+| distinct 4-grams | 85.1% | **92.6%** |
+| two-hop / arithmetic | 30% / 0% | 40% / 0% |
+| verbatim 20-gram copy | - | 0.00% |
+
+Per domain: tool 0.798, code 1.006, sec 1.040, cli 1.359, inst 1.404, docs 1.663, repo 1.750, math 1.807,
+know 2.028, web 3.121. The two-hop set is small, so 30% to 40% may be noise; val_mean and the
+repetition measure are the solid gains. Arithmetic is still 0%: no amount of this data teaches 3-digit sums
+at 157M.
+
+**How it ran:** the A100 runtime died at step 23287 (2026-11-03 05:05 UTC) when the desktop app reset,
+and resumed from the step 23000 checkpoint on one LR curve, as designed. No A100 was free the next
+day, so the rest ran on a **G4 (RTX PRO 6000 Blackwell, 96 GB)**: 22-23.5k tok/s against the A100's
+16-18k, but ~10.05 units/hour against ~6.7, so ~13% more per token. The notebook now takes any GPU with
+40 GB or more. The restart lost ~11 hours of wall time because each new runtime needs a hand click on
+the Drive permission popup, which the browser pane blocks for Claude.
+
+**Cost:** about 170 units for step 4 including waits (206 on 2026-11-02 to 36.1 after). **36 units left**
+for step 5.
+
+### Step 4 setup (2026-11-02)
 
 `scripts/prepare_quality.py`, `scripts/test_step4.py`, `notebooks/kestrel_v3_step4_pretrain.ipynb`.
 

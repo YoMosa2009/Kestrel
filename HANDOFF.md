@@ -72,7 +72,7 @@ facts into the PKM value slots only.
   "MALXPC"), where Colab dialogs freeze the extension. Do sign-in popups and native download
   prompts by hand.
 - Colab: **~6.7 units/A100-hour** under load (the Resources panel reads lower just after
-  connecting). **220 units left** after step 3 (2026-11-02). Google AI Pro
+  connecting). **36 units left** after step 4 (2026-11-04). A G4 (RTX PRO 6000) costs ~10 units/hour and is ~30% faster than an A100. Google AI Pro
   grants 200/month. Balance: command palette → "View resources". Always "Disconnect and
   delete runtime" when a job ends. A new runtime asks for Drive access, which I grant by hand (the browser pane blocks that
   popup unless I click, so Claude can't accept it even with permission); the
@@ -95,10 +95,10 @@ on downloadable preference data (e.g. UltraFeedback) + an SFT data fix.
 | 1 | new SFT mix (greetings, small talk, full factual answers, multi-turn recovery, refusals only for harmful, no fake Output comments); tokenize on a CPU runtime; retrain SFT | ~10 |
 | 2 | DPO: done, made the model worse, not adopted | 7 |
 | 3 | MTP head ablation: done, lost, stays off | 22 |
-| 4 | continued pretraining on ~1.5B quality tokens, low LR, resumable, from `runs/mtp_control`: **running since 2026-11-02** | ~170 |
+| 4 | continued pretraining on ~1.5B quality tokens, low LR, from `runs/mtp_control`: **done 2026-11-04**, val_mean 1.598 vs 1.635 | ~170 |
 | 5 | re-SFT (DPO only if a targeted run earns it), Roost self-facts, export gguf, parity, app defaults (R=2, temp ~0.5, top-p 0.9, top-k 30, rep 1.1, memory recall off, neutral system prompt) → **release V3** | ~20 |
 
-**Steps 0, 1, 2 and 3 are done** (docs/11 has the results). Train at seq 4096, batch 16 × accum 3: ~18k
+**Steps 0-4 are done** (docs/11 has the results). Train at seq 4096, batch 16 × accum 3: ~18k
 tok/s without pauses, 16.3k with evals and Drive saves, so 104-115 units per 1B tokens. **Best model so far is step 1's (Drive `runs/sft_v3/ckpt.pt`):** no
 stock-line repeats, no fake output comments, facts correct 48% (V1 25%), harmful prompts refused
 only 18%. **Step 2's DPO made it worse** (answers 18 -> 68 words, facts 38%, harmful refused 3%), so
@@ -106,12 +106,9 @@ only 18%. **Step 2's DPO made it worse** (answers 18 -> 68 words, facts 38%, har
 **Step 3's MTP head lost** (val_mean 1.668 vs 1.635, worse on all 10 domains, 6.1% slower), so `--mtp`
 stays off.
 
-**Step 4 in progress:** `notebooks/kestrel_v3_step4_pretrain.ipynb` trains into Drive `runs/pretrain_v3`.
-If the runtime dies, open that notebook on an A100 and Run all: it resumes from Drive on one LR curve.
-
-With 220 units, step 5 ≈ 6-20 and the reserve is 25, so **step 4 gets ~175 units ≈ 1.5B tokens**. V3 can still be done without waiting for a refill. Keep a ~25-unit reserve for reruns: if
-anything costs more than estimated, trim step 4's token count, not
-step 5's checks.
+**Step 4 is done:** Drive `runs/pretrain_v3/ckpt.pt` (4.76B tokens) beats the step 3 control: val_mean
+1.598 vs 1.635, distinct 4-grams 92.6% vs 85.1%. Step 5 starts from it. **36 units left**, so step 5
+(~20) fits with little reserve; the next refill is ~2026-12-16.
 
 ## 7. Open items
 - 50-fact Roost benchmark: 40% recall (gate 60%); one-fact-per-row version not yet run
