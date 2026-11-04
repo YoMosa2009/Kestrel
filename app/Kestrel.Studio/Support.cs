@@ -67,6 +67,7 @@ public sealed class Settings
             s.Loops = d.Loops; s.Temperature = d.Temperature; s.TopK = d.TopK; s.TopP = d.TopP;
             s.RepetitionPenalty = d.RepetitionPenalty; s.SystemPrompt = d.SystemPrompt;
             s.UseMemory = d.UseMemory; s.Defaults = AppPaths.StudioVersion;
+            s.LastModel = null;     // so the newest model, the one this release bundles, opens first
         }
         return s;
     }
