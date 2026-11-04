@@ -13,7 +13,7 @@ namespace Kestrel.Studio;
 public static class AppPaths
 {
     /// <summary>Release label of this build of the app (bundled with the same-numbered model).</summary>
-    public const string StudioVersion = "V2";
+    public const string StudioVersion = "V3";
 
     /// <summary>Folder the exe runs from: a .gguf shipped next to it is offered without copying.</summary>
     public static readonly string ExeDir = AppContext.BaseDirectory;
@@ -37,23 +37,38 @@ public sealed class Settings
 {
     public string? LastModel { get; set; }
     public int Loops { get; set; } = 2;
-    public float Temperature { get; set; } = 0.7f;
-    public int TopK { get; set; } = 40;
-    public float TopP { get; set; } = 0.95f;
+    public float Temperature { get; set; } = 0.5f;
+    public int TopK { get; set; } = 30;
+    public float TopP { get; set; } = 0.9f;
     public float RepetitionPenalty { get; set; } = 1.1f;
     public int MaxTokens { get; set; } = 400;
-    public string SystemPrompt { get; set; } = "";
-    public bool UseMemory { get; set; } = true;
+    public string SystemPrompt { get; set; } = DefaultSystemPrompt;
+    // Off by default: a recalled refusal-shaped line kept pulling V2's replies toward it.
+    public bool UseMemory { get; set; } = false;
+    /// <summary>Release whose defaults these settings started from. Older saved settings get the
+    /// current release's sampling defaults once, because they were tuned for an older model.</summary>
+    public string? Defaults { get; set; }
+
+    /// <summary>The system prompt V3's chat eval was scored with.</summary>
+    public const string DefaultSystemPrompt = "You are Kestrel-Nano, a small AI assistant made by MalxTech.";
 
     public static Settings Load()
     {
+        var s = new Settings { Defaults = AppPaths.StudioVersion };
         try
         {
             if (File.Exists(AppPaths.SettingsFile))
-                return JsonSerializer.Deserialize<Settings>(File.ReadAllText(AppPaths.SettingsFile)) ?? new();
+                s = JsonSerializer.Deserialize<Settings>(File.ReadAllText(AppPaths.SettingsFile)) ?? s;
         }
         catch { /* a corrupt settings file must never stop the app from starting */ }
-        return new();
+        if (s.Defaults != AppPaths.StudioVersion)
+        {
+            var d = new Settings();
+            s.Loops = d.Loops; s.Temperature = d.Temperature; s.TopK = d.TopK; s.TopP = d.TopP;
+            s.RepetitionPenalty = d.RepetitionPenalty; s.SystemPrompt = d.SystemPrompt;
+            s.UseMemory = d.UseMemory; s.Defaults = AppPaths.StudioVersion;
+        }
+        return s;
     }
 
     public void Save() =>
