@@ -414,6 +414,10 @@ def main():
                          "tokens, so the set still exercises the 4k context")
     ap.add_argument("--long-min", type=int, default=1024)
     ap.add_argument("--seed", type=int, default=1337)
+    ap.add_argument("--harmful-share", type=float, default=HARMFUL_SHARE,
+                    help="refusal slice size; V3 step 5 raises it because 2%% refused only 18%%")
+    ap.add_argument("--contrast-share", type=float, default=CONTRAST_SHARE,
+                    help="benign scary-word questions that keep refusals from spreading to a topic")
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -489,8 +493,8 @@ def main():
     constructed = {
         "greet": [(t, 0) for t in build_greetings(int(args.examples * GREET_SHARE), rng)],
         "chain": build_chains(pairs, questions, int(args.examples * CHAIN_SHARE), rng),
-        "refusal": [(t, 0) for t in build_refusals(questions, int(args.examples * HARMFUL_SHARE), rng)],
-        "contrast": [(t, 0) for t in build_contrast(int(args.examples * CONTRAST_SHARE), rng)],
+        "refusal": [(t, 0) for t in build_refusals(questions, int(args.examples * args.harmful_share), rng)],
+        "contrast": [(t, 0) for t in build_contrast(int(args.examples * args.contrast_share), rng)],
         "identity": [(t, 0) for t in build_identity(int(args.examples * IDENTITY_SHARE), rng)],
     }
     collected.update(constructed)
@@ -530,8 +534,8 @@ def main():
 
     targets = {s[0]: int(args.examples * s[5]) for s in SOURCES}
     targets.update(greet=int(args.examples * GREET_SHARE), chain=int(args.examples * CHAIN_SHARE),
-                   refusal=int(args.examples * HARMFUL_SHARE),
-                   contrast=int(args.examples * CONTRAST_SHARE),
+                   refusal=int(args.examples * args.harmful_share),
+                   contrast=int(args.examples * args.contrast_share),
                    identity=int(args.examples * IDENTITY_SHARE))
     manifest["per_source"] = {k: len(v) for k, v in collected.items()}
     manifest["shortfall"] = {k: targets[k] - len(collected.get(k, []))
