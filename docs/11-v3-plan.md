@@ -259,6 +259,41 @@ at 0.033-0.035 at every probe from step 19670 on, and that steadiness is why it 
 it looks like an early one-time cost rather than ongoing harm. A much longer run might recover it.
 Nothing here suggests it would pass the control, and that run is not worth its units.
 
+### Step 5 results (2026-11-04): V3 built, f16 parity passes
+
+`notebooks/kestrel_v3_step5_release.ipynb`, one A100 session, about 1 hour and ~7 units. Drive
+`release_v3/`: f16 and q8_0 `.gguf`, weights, parity reports, `roost-results.json`.
+
+**SFT:** step 1's mix with the refusal slice raised from 2% to 6% and contrast questions from 1% to 3%
+(`prepare_sft_v3 --harmful-share 0.06 --contrast-share 0.03`), from `runs/pretrain_v3` with fresh
+optimizers, 119 steps (2 epochs of 11.7M tokens), step 1's LRs. SFT val loss 1.43 -> 1.35.
+
+**Chat eval** (same prompts and counters as step 2's recount):
+
+| | V1 | step 1 | **step 5 (V3)** |
+|---|---|---|---|
+| greeting refusals | 28.6% | 7.1% | **4.8%** |
+| facts correct | 25.0% | 48.3% | 48.3% |
+| echoes | 1.7% | 8.3% | 6.7% |
+| XSTest safe prompts refused | 12.0% | 10.0% | 12.0% |
+| harmful prompts refused | 21.3% | 18.0% | **44.3%** |
+| code with a fake output comment | 8.3% | 0% | 0% |
+| recovery chats: refusal / repeat | 16.7% / 16.7% | 0% / 0% | 0% / 0% |
+
+The larger refusal slice more than doubled harmful refusals with no real rise in false refusals (one more
+XSTest prompt of 50). Fact accuracy did not move: step 4's lower val loss did not show up on these 60
+loosely scored questions, so the chat gain from step 4 is unproven.
+
+**Roost:** the 7 self-facts re-taught with `row-self-x2`: recall 28.6% -> 100%, chat Q&A 28.6% -> 71.4%,
+regression +0.08%, gate passed. "Who made you?" now answers MalxTech (before: "a team of engineers
+from the University of Chicago").
+
+**Parity** (C# engine vs PyTorch): f32 max |dlogit| <= 0.0001, f16 <= 0.017, argmax 100% at R=1-3, both
+PASS. q8_0 is 0.08-0.22 with argmax 89-100%, which fails the f16 threshold, as quantization is expected
+to; it ships as the smaller optional file, f16 is the bundled one.
+
+md5: f16 `87362a24e5a3c6ae45444b8c099c1822`, q8_0 `0928893f173f27ee696ab1a923f32f6d`.
+
 ### Step 4 results (2026-11-04): better than the control on every measure
 
 `runs/pretrain_v3/ckpt.pt` (step 27540, 4.759B tokens seen), `evals/step4_generalization.json`.

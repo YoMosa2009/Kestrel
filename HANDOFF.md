@@ -98,13 +98,19 @@ on downloadable preference data (e.g. UltraFeedback) + an SFT data fix.
 | 4 | continued pretraining on ~1.5B quality tokens, low LR, from `runs/mtp_control`: **done 2026-11-04**, val_mean 1.598 vs 1.635 | ~170 |
 | 5 | re-SFT (DPO only if a targeted run earns it), Roost self-facts, export gguf, parity, app defaults (R=2, temp ~0.5, top-p 0.9, top-k 30, rep 1.1, memory recall off, neutral system prompt) → **release V3** | ~20 |
 
-**Steps 0-4 are done** (docs/11 has the results). Train at seq 4096, batch 16 × accum 3: ~18k
+**Steps 0-5 are done; V3 is built, not yet released** (docs/11 has the results). Train at seq 4096, batch 16 × accum 3: ~18k
 tok/s without pauses, 16.3k with evals and Drive saves, so 104-115 units per 1B tokens. **Best model so far is step 1's (Drive `runs/sft_v3/ckpt.pt`):** no
 stock-line repeats, no fake output comments, facts correct 48% (V1 25%), harmful prompts refused
 only 18%. **Step 2's DPO made it worse** (answers 18 -> 68 words, facts 38%, harmful refused 3%), so
 `runs/dpo_v3` is not used and that recipe must not be reused at step 5. Refusals are still unsolved.
 **Step 3's MTP head lost** (val_mean 1.668 vs 1.635, worse on all 10 domains, 6.1% slower), so `--mtp`
 stays off.
+
+**Step 5 is done (2026-11-04):** Kestrel-Nano V3 = step 4's model + SFT with a 6% refusal slice
+(`runs/sft_v5`) + Roost self-facts. Chat eval vs step 1: harmful refused 18% -> 44%, greeting refusals
+7% -> 5%, facts 48% both. f16/q8_0 `.gguf` on Drive `release_v3/` and in `C:/Users/mosaa/KestrelRelease/v3`;
+bundle `KestrelRelease/Kestrel-V3-Windows-x64.zip` (Studio V3 + f16). **Release (tag v3.0.0, GitHub
+release) waits for my OK.**
 
 **Step 4 is done:** Drive `runs/pretrain_v3/ckpt.pt` (4.76B tokens) beats the step 3 control: val_mean
 1.598 vs 1.635, distinct 4-grams 92.6% vs 85.1%. Step 5 starts from it. **36 units left**, so step 5
